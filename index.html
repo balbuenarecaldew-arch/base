@@ -114,7 +114,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;font-size:15px;color:var(--txt)
 /* ═══ TABLAS ══════════════════════════════════════════════════ */
 .tbl-wrap{overflow-x:auto}
 table{width:100%;border-collapse:collapse;min-width:500px}
-th{padding:9px 12px;text-align:left;font-size:11px;font-weight:700;color:#9DBFAD;background:#1A1A1A;border-bottom:1px solid #2A2A2A;white-space:nowrap;text-transform:uppercase;letter-spacing:.04em;position:sticky;top:155px;z-index:97}
+th{padding:9px 12px;text-align:left;font-size:11px;font-weight:700;color:#9DBFAD;background:#161616;border-bottom:2px solid var(--acento3);white-space:nowrap;text-transform:uppercase;letter-spacing:.04em;position:sticky;top:155px;z-index:97}
 td{padding:8px 12px;border-bottom:1px solid #2A2A2A;vertical-align:middle;font-size:14px;color:#E8F5EE}
 tr:hover td{background:#1A1A1A}
 .cap-row td{color:#fff!important;font-weight:700;font-size:12px;padding:8px 12px;text-transform:uppercase;letter-spacing:.04em;border-left:4px solid}
@@ -335,7 +335,7 @@ select option{background:var(--bg2);color:#E8F5EE}
       <div class="card-header">
         <h2>📊 Presupuesto Activo</h2>
         <div class="btns">
-          <button class="btn btn-primary" onclick="abrirSelector()">＋ Agregar partida</button>
+          <button class="btn btn-primary" onclick="irABD()">＋ Agregar partida</button>
           <button class="btn btn-secondary" onclick="guardarPresupuestoActual()" style="background:var(--acento3);color:var(--acento);border-color:var(--acento2)">💾 Guardar en archivo</button>
           <button class="btn btn-danger" onclick="limpiarPres()">🗑 Vaciar</button>
         </div>
@@ -906,6 +906,16 @@ function showTab(id,el){
   if(id==='imprimir')generarPreview();
   if(id==='admin')cargarUsuarios();
   if(id==='guardados')renderGuardados();
+}
+function irABD(){
+  // Navegar a Base de Datos y hacer scroll arriba
+  const tabEl = document.querySelector('.tab');
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('tab-bd').classList.add('active');
+  document.querySelectorAll('.tab')[0].classList.add('active');
+  window.scrollTo({top:0, behavior:'smooth'});
+  renderBD();
 }
 function setRamo(r){
   ramoActivo=r;
@@ -1756,11 +1766,21 @@ async function guardarPresupuestoActual(){
     }
   };
   PRESUPUESTOS_GUARDADOS.unshift(nuevo); // más reciente primero
-  presupuestoActivoGuardadoId = nuevo.id;
+  presupuestoActivoGuardadoId = null;
   marcarUnsaved();
   await guardarFirebase();
+
+  // Limpiar el presupuesto activo
+  PRESUPUESTO = [];
+  ['p-nombre','p-cliente','p-ubic','p-resp','p-nro'].forEach(id => {
+    const el = document.getElementById(id);
+    if(el) el.value = '';
+  });
+  document.getElementById('p-fecha').value = new Date().toISOString().split('T')[0];
+  renderPres();
+  renderBD();
   renderGuardados();
-  notif('✓ Presupuesto "' + nuevo.nombre + '" guardado');
+  notif('✓ Presupuesto "' + nuevo.nombre + '" guardado y panel limpio');
 }
 
 function abrirPresupuestoGuardado(idx){
