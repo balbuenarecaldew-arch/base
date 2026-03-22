@@ -1461,58 +1461,98 @@ async function toggleUsuario(uid,activo){
   cargarUsuarios();
 }
 
-// Registrar acceso del usuario al iniciar sesión
+// Registrar acceso y verificar si está bloqueado
 async function registrarAcceso(user){
   try{
-    await db.collection('usuarios').doc(user.uid).set({
-      email:user.email,
-      ultimoAcceso:new Date().toLocaleString('es-PY'),
-      activo:true,
-    },{merge:true});
+    const docRef = db.collection('usuarios').doc(user.uid);
+    const snap = await docRef.get();
 
-    // Verificar si está bloqueado
-    const doc=await db.collection('usuarios').doc(user.uid).get();
-    if(doc.exists&&doc.data().activo===false){
+    // Si ya existe y está bloqueado, cerrar sesión
+    if(snap.exists && snap.data().activo === false){
       await auth.signOut();
-      document.getElementById('login-err').textContent='Tu acceso fue bloqueado por el administrador.';
+      const err = document.getElementById('login-err');
+      if(err){ err.textContent='Tu acceso fue bloqueado por el administrador.'; err.classList.add('visible'); }
+      return false;
     }
-  }catch(e){console.warn('Error registrando acceso',e);}
-}
 
-// Hacer admin al primer usuario que crea la cuenta
-async function verificarPrimerAdmin(user){
-  const admSnap=await db.collection('admins').get();
-  if(admSnap.empty){
-    await db.collection('admins').doc(user.uid).set({email:user.email,desde:new Date().toISOString()});
-    isAdmin=true;
-    document.getElementById('admin-badge').style.display='';
-    document.getElementById('tab-admin-btn').style.display='';
-    notif('✓ Sos el primer usuario — tenés permisos de administrador');
+    // Guardar/actualizar acceso (no sobrescribe activo si ya existe)
+    await docRef.set({
+      email: user.email,
+      ultimoAcceso: new Date().toLocaleString('es-PY'),
+    }, {merge:true});
+
+    // Si es nuevo usuario, setear activo:true
+    if(!snap.exists){
+      await docRef.update({activo: true});
+    }
+    return true;
+  }catch(e){
+    console.warn('Error registrarAcceso:', e);
+    return true; // Si falla el registro, dejamos pasar igual
   }
 }
 
-// Override del auth listener para incluir registro de acceso
+// Verificar si el usuario es admin (tiene doc en /admins)
+// Si no hay ningún admin, este usuario se convierte en admin
+async function verificarAdmin(user){
+  try{
+    const adminRef = db.collection('admins').doc(user.uid);
+    const adminDoc = await adminRef.get();
+    if(adminDoc.exists){
+      return true;
+    }
+    // Ver si existe algún admin
+    const adminSnap = await db.collection('admins').limit(1).get();
+    if(adminSnap.empty){
+      // Primer usuario = admin
+      await adminRef.set({email: user.email, desde: new Date().toISOString()});
+      return true;
+    }
+    return false;
+  }catch(e){
+    console.warn('Error verificarAdmin:', e);
+    return false;
+  }
+}
+
+// Auth listener — único y definitivo
 auth.onAuthStateChanged(async user=>{
   if(user){
-    currentUser=user;
-    await verificarPrimerAdmin(user);
-    await registrarAcceso(user);
+    currentUser = user;
+
+    // Verificar acceso
+    const accesoConcedido = await registrarAcceso(user);
+    if(!accesoConcedido) return; // fue bloqueado, salir
+
+    // Verificar si es admin
+    isAdmin = await verificarAdmin(user);
+
+    // Mostrar app
     document.getElementById('login-screen').style.display='none';
     document.getElementById('app').style.display='block';
-    document.getElementById('user-email-display').textContent=user.email;
-    const adminDoc=await db.collection('admins').doc(user.uid).get();
-    isAdmin=adminDoc.exists;
-    if(isAdmin){document.getElementById('admin-badge').style.display='';document.getElementById('tab-admin-btn').style.display='';}
+    document.getElementById('user-email-display').textContent = user.email;
+    document.getElementById('login-submit').textContent = 'Ingresar →';
+    document.getElementById('login-submit').disabled = false;
+
+    if(isAdmin){
+      document.getElementById('admin-badge').style.display='';
+      document.getElementById('tab-admin-btn').style.display='';
+      notif('⚡ Bienvenido, Administrador');
+    } else {
+      notif('✓ Bienvenido, ' + user.email.split('@')[0]);
+    }
+
     cargarDesdeFirebase();
     initSecciones();
-    document.getElementById('p-fecha').value=new Date().toISOString().split('T')[0];
+    document.getElementById('p-fecha').value = new Date().toISOString().split('T')[0];
     actualizarBtnUndo();
-  }else{
-    currentUser=null;
+
+  } else {
+    currentUser = null;
     document.getElementById('login-screen').style.display='flex';
     document.getElementById('app').style.display='none';
-    document.getElementById('login-submit').textContent='Ingresar';
-    document.getElementById('login-submit').disabled=false;
+    document.getElementById('login-submit').textContent = 'Ingresar →';
+    document.getElementById('login-submit').disabled = false;
   }
 });
 
