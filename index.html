@@ -620,34 +620,6 @@ function cerrarSesion(){
   auth.signOut();
 }
 
-auth.onAuthStateChanged(async user=>{
-  if(user){
-    currentUser=user;
-    document.getElementById('login-screen').style.display='none';
-    document.getElementById('app').style.display='block';
-    document.getElementById('user-email-display').textContent=user.email;
-
-    // Verificar si es admin (primer usuario registrado o tiene doc en /admins)
-    const adminDoc=await db.collection('admins').doc(user.uid).get();
-    isAdmin=adminDoc.exists;
-    if(isAdmin){
-      document.getElementById('admin-badge').style.display='';
-      document.getElementById('tab-admin-btn').style.display='';
-    }
-
-    cargarDesdeFirebase();
-    initSecciones();
-    document.getElementById('p-fecha').value=new Date().toISOString().split('T')[0];
-    actualizarBtnUndo();
-  } else {
-    currentUser=null;
-    document.getElementById('login-screen').style.display='flex';
-    document.getElementById('app').style.display='none';
-    document.getElementById('login-submit').textContent='Ingresar';
-    document.getElementById('login-submit').disabled=false;
-  }
-});
-
 // ═══════════════════════════════════════════════════════════════
 // FIREBASE CRUD
 // ═══════════════════════════════════════════════════════════════
