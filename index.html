@@ -282,7 +282,8 @@ select option{background:var(--bg2);color:#E8F5EE}
   <div class="tabs">
     <div class="tab active" onclick="showTab('bd',this)">📋 Base de Datos</div>
     <div class="tab" onclick="showTab('apu',this)">🔍 Análisis Precio Unitario</div>
-    <div class="tab" onclick="showTab('pres',this)">📊 Presupuesto</div>
+    <div class="tab" onclick="showTab('pres',this)">📊 Presupuesto Activo</div>
+    <div class="tab" onclick="showTab('guardados',this)">🗂 Presupuestos Guardados</div>
     <div class="tab" onclick="showTab('resumen',this)">📈 Resumen</div>
     <div class="tab" onclick="showTab('imprimir',this)">🖨 Imprimir</div>
     <div class="tab" id="tab-admin-btn" style="display:none" onclick="showTab('admin',this)">⚡ Usuarios</div>
@@ -296,6 +297,7 @@ select option{background:var(--bg2);color:#E8F5EE}
         <div class="btns">
           <input id="bd-search" placeholder="Buscar..." oninput="renderBD()" style="width:200px;padding:7px 11px;font-size:13px">
           <button class="btn btn-primary" onclick="abrirModalPartida()">＋ Nueva partida</button>
+          <button class="btn btn-secondary" onclick="abrirModalCaps()">⚙ Capítulos</button>
           <button class="btn btn-export" onclick="exportarExcel()">⬇ Excel</button>
         </div>
       </div>
@@ -362,6 +364,24 @@ select option{background:var(--bg2);color:#E8F5EE}
       <div style="display:flex;justify-content:flex-end;align-items:center;gap:14px;padding:12px 16px;background:var(--bg2);border-top:1px solid var(--borde);border-radius:0 0 var(--radio) var(--radio)">
         <span style="font-size:13px;color:var(--txt3)">Costo directo:</span>
         <span id="pres-cd" style="font-size:20px;font-weight:700;color:var(--acento);font-family:'Courier New',monospace">₲ 0</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- PRESUPUESTOS GUARDADOS -->
+  <div class="view" id="tab-guardados">
+    <div class="card">
+      <div class="card-header">
+        <h2>🗂 Presupuestos Guardados</h2>
+        <div class="btns">
+          <button class="btn btn-primary" onclick="guardarPresupuestoActual()">💾 Guardar presupuesto activo</button>
+        </div>
+      </div>
+      <div class="card-body">
+        <p style="font-size:13px;color:var(--txt3);margin-bottom:16px">Guardá el presupuesto activo con un nombre para archivarlo. Podés reabrirlo, editarlo o imprimirlo cuando quieras.</p>
+        <div id="lista-guardados">
+          <div class="loading"><div class="spinner"></div>Cargando...</div>
+        </div>
       </div>
     </div>
   </div>
@@ -563,6 +583,20 @@ select option{background:var(--bg2);color:#E8F5EE}
 <div class="notif" id="notif"></div>
 <div id="print-output"></div>
 
+<!-- Modal capítulos -->
+<div class="modal-bg" id="modal-caps">
+  <div class="modal" style="max-width:680px">
+    <h2>⚙ Gestión de Capítulos</h2>
+    <p style="font-size:12px;color:var(--txt3);margin-bottom:16px">Los capítulos agrupan las partidas de la base de datos. Podés agregar, editar o eliminar capítulos.</p>
+    <div id="caps-list" style="margin-bottom:16px"></div>
+    <button class="btn btn-primary" onclick="agregarCapitulo()">＋ Nuevo capítulo</button>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="cerrarModal('modal-caps')">Cerrar</button>
+      <button class="btn btn-export" onclick="guardarCapitulos()">✓ Guardar capítulos</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ═══════════════════════════════════════════════════════════════
 // FIREBASE CONFIG
@@ -582,7 +616,7 @@ const db   = firebase.firestore();
 // ═══════════════════════════════════════════════════════════════
 // ESTADO GLOBAL
 // ═══════════════════════════════════════════════════════════════
-const CAPS=[
+let CAPS=[
   {id:'01',name:'Trabajos previos y demoliciones',color:'#4A7C5A',ramos:['todos','civil','vial']},
   {id:'02',name:'Movimiento de tierras',color:'#8B6A14',ramos:['todos','civil','vial']},
   {id:'03',name:'Fundaciones y estructuras',color:'#9B2020',ramos:['todos','civil','vial']},
@@ -724,6 +758,8 @@ async function cargarDesdeFirebase(){
       if(snap.exists){
         const d=snap.data();
         DB=d.DB||[]; APU=d.APU||{}; PRESUPUESTO=d.PRESUPUESTO||[];
+        if(d.CAPS && d.CAPS.length) CAPS = d.CAPS;
+        if(d.PRESUPUESTOS_GUARDADOS) PRESUPUESTOS_GUARDADOS = d.PRESUPUESTOS_GUARDADOS;
         if(d.EMPRESAS){ EMPRESAS=d.EMPRESAS; empresaActivaId=d.empresaActivaId||null; renderEmpresasSel(); if(empresaActivaId)cargarEmpresa(); }
         if(d.config){
           setTimeout(()=>{
@@ -785,7 +821,7 @@ async function guardarFirebase(){
       pctIva:document.getElementById('pct-iva').value,
       logo:logoDataURL||null,
     };
-    await db.collection('datos').doc('base').set({DB,APU,PRESUPUESTO,EMPRESAS,empresaActivaId,config,updatedBy:currentUser.email,updatedAt:firebase.firestore.FieldValue.serverTimestamp()});
+    await db.collection('datos').doc('base').set({DB,APU,PRESUPUESTO,CAPS,EMPRESAS,empresaActivaId,PRESUPUESTOS_GUARDADOS,config,updatedBy:currentUser.email,updatedAt:firebase.firestore.FieldValue.serverTimestamp()});
     hayUnsaved=false;
     btn.classList.add('saved'); btn.innerHTML='✓ Guardado';
     setSyncStatus(false);
@@ -891,6 +927,7 @@ function showTab(id,el){
   if(id==='pres')renderPres();
   if(id==='imprimir')generarPreview();
   if(id==='admin')cargarUsuarios();
+  if(id==='guardados')renderGuardados();
 }
 function setRamo(r){
   ramoActivo=r;
@@ -1581,6 +1618,225 @@ auth.onAuthStateChanged(async user=>{
 // MULTI-EMPRESA
 // ═══════════════════════════════════════════════════════════════
 let EMPRESAS = {}; // { id: {nombre, ruc, dir, logo, nota, plazo, pago, validez} }
+
+// ═══════════════════════════════════════════════════════════════
+// CAPÍTULOS — GESTIÓN
+// ═══════════════════════════════════════════════════════════════
+const COLORES_PRESET = [
+  '#4A7C5A','#8B6A14','#9B2020','#8B5A1A','#1A5A8B',
+  '#3A7A30','#8A3070','#1A7A5A','#5A4AAA','#6A6A6A',
+  '#8A6A14','#2A7A55','#C45000','#1A6B8B','#7A2020',
+];
+
+function abrirModalCaps(){
+  renderCapsModal();
+  abrirModal('modal-caps');
+}
+
+function renderCapsModal(){
+  const container = document.getElementById('caps-list');
+  let html = '';
+  CAPS.forEach((cap, idx) => {
+    html += `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--borde)">
+      <input type="text" value="${cap.id}" readonly
+        style="width:48px;text-align:center;font-family:'Courier New',monospace;font-weight:700;font-size:13px;background:var(--bg3);border:1px solid var(--borde2);border-radius:6px;padding:6px;color:var(--acento)">
+      <input type="text" id="cap-name-${idx}" value="${cap.name}"
+        style="flex:1;padding:7px 10px;border:1px solid var(--borde2);border-radius:6px;font-size:13px;background:var(--bg2);color:var(--txt)">
+      <input type="color" id="cap-color-${idx}" value="${cap.color}"
+        style="width:40px;height:36px;border:none;border-radius:6px;cursor:pointer;background:none;padding:2px">
+      <select id="cap-ramos-${idx}" multiple
+        style="padding:4px 8px;border:1px solid var(--borde2);border-radius:6px;font-size:11px;background:var(--bg2);color:var(--txt);height:36px;min-width:120px">
+        <option value="todos" ${cap.ramos.includes('todos')?'selected':''}>Todos</option>
+        <option value="civil" ${cap.ramos.includes('civil')?'selected':''}>Civil</option>
+        <option value="vial" ${cap.ramos.includes('vial')?'selected':''}>Vial</option>
+        <option value="electrica" ${cap.ramos.includes('electrica')?'selected':''}>Eléctrica</option>
+        <option value="sanitaria" ${cap.ramos.includes('sanitaria')?'selected':''}>Sanitaria</option>
+        <option value="hvac" ${cap.ramos.includes('hvac')?'selected':''}>HVAC</option>
+        <option value="acabados" ${cap.ramos.includes('acabados')?'selected':''}>Acabados</option>
+      </select>
+      <button class="btn btn-danger btn-xs" onclick="eliminarCapitulo(${idx})" title="Eliminar capítulo">✕</button>
+    </div>`;
+  });
+  container.innerHTML = html || '<p style="color:var(--txt3);font-size:13px">Sin capítulos definidos</p>';
+}
+
+function agregarCapitulo(){
+  const maxId = CAPS.length > 0
+    ? Math.max(...CAPS.map(c => parseInt(c.id))) + 1
+    : 1;
+  const newId = String(maxId).padStart(2,'0');
+  const color = COLORES_PRESET[CAPS.length % COLORES_PRESET.length];
+  CAPS.push({id: newId, name: 'Nuevo capítulo', color, ramos:['todos']});
+  renderCapsModal();
+}
+
+function eliminarCapitulo(idx){
+  const cap = CAPS[idx];
+  const tienePartidas = DB.some(p => p.cap === cap.id);
+  if(tienePartidas){
+    if(!confirm(`El capítulo "${cap.name}" tiene partidas asignadas.\n¿Eliminar igual? Las partidas quedarán sin capítulo.`)) return;
+  }
+  CAPS.splice(idx, 1);
+  renderCapsModal();
+}
+
+function guardarCapitulos(){
+  // Leer valores editados del modal
+  CAPS.forEach((cap, idx) => {
+    const nameEl = document.getElementById(`cap-name-${idx}`);
+    const colorEl = document.getElementById(`cap-color-${idx}`);
+    const ramosEl = document.getElementById(`cap-ramos-${idx}`);
+    if(nameEl) cap.name = nameEl.value.trim() || cap.name;
+    if(colorEl) cap.color = colorEl.value;
+    if(ramosEl) cap.ramos = Array.from(ramosEl.selectedOptions).map(o => o.value);
+  });
+  cerrarModal('modal-caps');
+  marcarUnsaved();
+  renderBD();
+  notif('✓ Capítulos guardados');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PRESUPUESTOS GUARDADOS
+// ═══════════════════════════════════════════════════════════════
+let PRESUPUESTOS_GUARDADOS = []; // [{id, nombre, fecha, cliente, nro, items, config}]
+
+function renderGuardados(){
+  const el = document.getElementById('lista-guardados');
+  if(!PRESUPUESTOS_GUARDADOS.length){
+    el.innerHTML = `<div style="text-align:center;padding:50px;color:var(--txt3)">
+      <div style="font-size:40px;margin-bottom:10px">🗂</div>
+      <div style="font-size:14px">No hay presupuestos guardados aún.</div>
+      <div style="font-size:12px;margin-top:6px">Hacé clic en <strong style="color:var(--acento)">💾 Guardar presupuesto activo</strong> para archivar el actual.</div>
+    </div>`;
+    return;
+  }
+  let html = `<table style="width:100%;border-collapse:collapse">
+    <thead><tr>
+      <th style="padding:9px 12px;background:#1A1A1A;font-size:11px;color:#9DBFAD">N°</th>
+      <th style="padding:9px 12px;background:#1A1A1A;font-size:11px;color:#9DBFAD">Nombre del proyecto</th>
+      <th style="padding:9px 12px;background:#1A1A1A;font-size:11px;color:#9DBFAD">Cliente</th>
+      <th style="padding:9px 12px;background:#1A1A1A;font-size:11px;color:#9DBFAD">Fecha</th>
+      <th style="padding:9px 12px;background:#1A1A1A;font-size:11px;color:#9DBFAD;text-align:right">Total ₲</th>
+      <th style="padding:9px 12px;background:#1A1A1A;font-size:11px;color:#9DBFAD">Guardado por</th>
+      <th style="padding:9px 12px;background:#1A1A1A;font-size:11px;color:#9DBFAD;width:160px">Acciones</th>
+    </tr></thead>
+    <tbody>`;
+  PRESUPUESTOS_GUARDADOS.forEach((pres, idx) => {
+    const total = pres.items.reduce((a, it) => {
+      const p = DB.find(x => x.id === it.pid);
+      return a + (p ? pu(p) * it.qty : 0);
+    }, 0);
+    const esActivo = pres.id === presupuestoActivoGuardadoId;
+    html += `<tr style="${esActivo ? 'background:rgba(34,197,133,.08);border-left:3px solid var(--acento)' : ''}">
+      <td style="padding:8px 12px;font-family:monospace;font-size:12px;color:var(--acento)">${pres.nro||'—'}</td>
+      <td style="padding:8px 12px;font-size:13px;font-weight:${esActivo?'700':'400'}">${pres.nombre||'Sin nombre'}${esActivo?'<span style="background:var(--acento3);color:var(--acento);font-size:10px;padding:1px 7px;border-radius:20px;margin-left:6px;font-weight:700">● activo</span>':''}</td>
+      <td style="padding:8px 12px;font-size:13px;color:var(--txt2)">${pres.cliente||'—'}</td>
+      <td style="padding:8px 12px;font-size:12px;color:var(--txt3)">${pres.fecha||'—'}</td>
+      <td style="padding:8px 12px;text-align:right;font-weight:700;color:var(--acento);font-family:'Courier New',monospace">₲ ${fmtN(total)}</td>
+      <td style="padding:8px 12px;font-size:11px;color:var(--txt3)">${pres.guardadoPor||'—'}</td>
+      <td style="padding:8px 12px">
+        <div style="display:flex;gap:5px">
+          <button class="btn btn-primary btn-xs" onclick="abrirPresupuestoGuardado(${idx})" title="Cargar en el presupuesto activo">📂 Abrir</button>
+          <button class="btn btn-secondary btn-xs" onclick="duplicarPresupuesto(${idx})" title="Duplicar">⎘</button>
+          <button class="btn btn-danger btn-xs" onclick="eliminarPresupuestoGuardado(${idx})" title="Eliminar">✕</button>
+        </div>
+      </td>
+    </tr>`;
+  });
+  html += '</tbody></table>';
+  el.innerHTML = html;
+}
+
+let presupuestoActivoGuardadoId = null;
+
+async function guardarPresupuestoActual(){
+  if(!PRESUPUESTO.length){ notif('El presupuesto activo está vacío','#E55'); return; }
+  const nombre = document.getElementById('p-nombre').value || 'Sin nombre';
+  const confirmado = confirm(`¿Guardar el presupuesto "${nombre}" en el archivo?\n\nVas a poder editarlo y reabrirlo cuando quieras.`);
+  if(!confirmado) return;
+
+  const nuevo = {
+    id: 'pres_' + Date.now(),
+    nombre: document.getElementById('p-nombre').value,
+    cliente: document.getElementById('p-cliente').value,
+    nro: document.getElementById('p-nro').value,
+    fecha: document.getElementById('p-fecha').value,
+    items: JSON.parse(JSON.stringify(PRESUPUESTO)),
+    guardadoPor: currentUser?.email || '—',
+    guardadoEl: new Date().toLocaleString('es-PY'),
+    config: {
+      pNombre: document.getElementById('p-nombre').value,
+      pCliente: document.getElementById('p-cliente').value,
+      pUbic: document.getElementById('p-ubic').value,
+      pResp: document.getElementById('p-resp').value,
+      pNro: document.getElementById('p-nro').value,
+      pFecha: document.getElementById('p-fecha').value,
+      pctGi: document.getElementById('pct-gi').value,
+      pctBi: document.getElementById('pct-bi').value,
+      pctIva: document.getElementById('pct-iva').value,
+    }
+  };
+  PRESUPUESTOS_GUARDADOS.unshift(nuevo); // más reciente primero
+  presupuestoActivoGuardadoId = nuevo.id;
+  marcarUnsaved();
+  await guardarFirebase();
+  renderGuardados();
+  notif('✓ Presupuesto "' + nuevo.nombre + '" guardado');
+}
+
+function abrirPresupuestoGuardado(idx){
+  const pres = PRESUPUESTOS_GUARDADOS[idx];
+  if(!confirm(`¿Abrir "${pres.nombre}"?\n\nEsto reemplazará el presupuesto activo actual.`)) return;
+
+  // Cargar items
+  PRESUPUESTO = JSON.parse(JSON.stringify(pres.items));
+  presupuestoActivoGuardadoId = pres.id;
+
+  // Cargar config del proyecto
+  if(pres.config){
+    ['pNombre','pCliente','pUbic','pResp','pNro','pFecha'].forEach(k => {
+      const el = document.getElementById('p-' + k.slice(1).toLowerCase());
+      if(el && pres.config[k]) el.value = pres.config[k];
+    });
+    if(pres.config.pctGi)  document.getElementById('pct-gi').value  = pres.config.pctGi;
+    if(pres.config.pctBi)  document.getElementById('pct-bi').value  = pres.config.pctBi;
+    if(pres.config.pctIva) document.getElementById('pct-iva').value = pres.config.pctIva;
+  }
+
+  // Ir a la pestaña de presupuesto
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab-pres').classList.add('active');
+  document.querySelector('[onclick="showTab(\'pres\',this)"]')?.classList.add('active');
+  renderPres();
+  renderGuardados();
+  notif('✓ Presupuesto "' + pres.nombre + '" cargado');
+}
+
+function duplicarPresupuesto(idx){
+  const pres = PRESUPUESTOS_GUARDADOS[idx];
+  const copia = JSON.parse(JSON.stringify(pres));
+  copia.id = 'pres_' + Date.now();
+  copia.nombre = pres.nombre + ' (copia)';
+  copia.guardadoPor = currentUser?.email || '—';
+  copia.guardadoEl = new Date().toLocaleString('es-PY');
+  PRESUPUESTOS_GUARDADOS.splice(idx + 1, 0, copia);
+  marcarUnsaved();
+  renderGuardados();
+  notif('✓ Presupuesto duplicado');
+}
+
+function eliminarPresupuestoGuardado(idx){
+  const pres = PRESUPUESTOS_GUARDADOS[idx];
+  const ok = prompt(`⚠ Para eliminar escribí el nombre exacto:\n\n"${pres.nombre}"\n\nNombre:`);
+  if(ok === null) return;
+  if(ok.trim() !== pres.nombre){ notif('Nombre incorrecto — no se eliminó','#E55'); return; }
+  PRESUPUESTOS_GUARDADOS.splice(idx, 1);
+  marcarUnsaved();
+  renderGuardados();
+  notif('Presupuesto eliminado','#E55');
+}
 let empresaActivaId = null;
 
 function renderEmpresasSel(){
