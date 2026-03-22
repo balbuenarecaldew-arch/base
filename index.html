@@ -190,10 +190,13 @@ select option{background:var(--bg2);color:#E8F5EE}
 .doc-datos strong{color:#1B4432}
 .doc-titulo{text-align:center;font-size:13pt;font-weight:700;color:#1B4432;margin:12px 0 3px;text-transform:uppercase;letter-spacing:.04em}
 .doc-subtitulo{text-align:center;font-size:8.5pt;color:#555;margin-bottom:14px}
-.doc-table{width:100%;border-collapse:collapse;margin-bottom:14px;font-size:9pt}
-.doc-table th{background:#1B4432;color:#fff;padding:6px 8px;text-align:left;font-size:8pt}
-.doc-table td{padding:5px 8px;border-bottom:1px solid #ddd;color:#111}
-.doc-table tr:nth-child(even) td{background:#f5faf7}
+.doc-table td{padding:5px 8px;border-bottom:1px solid #ddd;color:#111!important;background:#fff}
+.doc-table tr:nth-child(even) td{background:#f5faf7!important;color:#111!important}
+.doc-table th{background:#1B4432;color:#fff!important;padding:6px 8px;text-align:left;font-size:8pt}
+/* Todas las celdas del documento impreso fuerzan negro */
+#preview-doc td,#preview-doc th,#preview-doc p,#preview-doc span,#preview-doc h2,#preview-doc h3{color:inherit}
+#preview-doc table td{color:#111!important}
+#preview-doc table{color:#111}
 .doc-cap-row td{background:#2A5C42!important;color:#fff!important;font-weight:700;font-size:8pt!important;padding:5px 8px!important}
 .doc-res-total{background:#1D9E75!important;color:#fff!important;font-weight:700;font-size:11pt}
 .doc-apu-item{border:1px solid #ddd;border-radius:5px;margin-bottom:12px;overflow:hidden}
@@ -380,19 +383,37 @@ select option{background:var(--bg2);color:#E8F5EE}
     <div style="display:grid;grid-template-columns:360px 1fr;gap:16px;align-items:start">
       <div>
         <div class="card">
-          <div class="card-header"><h2>🏢 Datos de la Empresa</h2></div>
+          <div class="card-header">
+            <h2>🏢 Empresa / Logo</h2>
+            <button class="btn btn-primary btn-sm" onclick="agregarEmpresa()">＋ Nueva empresa</button>
+          </div>
           <div class="card-body" style="display:flex;flex-direction:column;gap:10px">
-            <div class="form-group"><label>Nombre de la empresa</label><input id="emp-nombre" oninput="marcarUnsaved()"></div>
-            <div class="form-group"><label>RUC / Teléfono</label><input id="emp-ruc" oninput="marcarUnsaved()"></div>
-            <div class="form-group"><label>Dirección</label><input id="emp-dir" oninput="marcarUnsaved()"></div>
-            <div class="form-group"><label>Logo (clic para cargar)</label>
-              <div class="logo-preview" id="logo-preview" onclick="cargarLogo()">+ Logo</div>
-              <input type="file" id="logo-input" accept="image/*" style="display:none" onchange="mostrarLogo(event)">
+            <!-- Selector de empresa activa -->
+            <div class="form-group">
+              <label>Empresa activa</label>
+              <select id="empresa-sel" onchange="cargarEmpresa()" style="font-size:14px;font-weight:600;color:var(--acento)">
+                <option value="">— Seleccioná una empresa —</option>
+              </select>
             </div>
-            <div class="form-group"><label>Nota al pie</label><textarea id="emp-nota" rows="2" style="resize:vertical" oninput="marcarUnsaved()"></textarea></div>
-            <div class="form-group"><label>Plazo de ejecución</label><input id="emp-plazo" oninput="marcarUnsaved()"></div>
-            <div class="form-group"><label>Forma de pago</label><input id="emp-pago" oninput="marcarUnsaved()"></div>
-            <div class="form-group"><label>Validez del presupuesto</label><input id="emp-validez" oninput="marcarUnsaved()"></div>
+            <div style="display:flex;gap:8px">
+              <button class="btn btn-secondary btn-sm" onclick="guardarEmpresaActual()">💾 Guardar empresa</button>
+              <button class="btn btn-danger btn-sm" onclick="eliminarEmpresaActual()">✕ Eliminar empresa</button>
+            </div>
+            <div style="border-top:1px solid var(--borde);padding-top:10px">
+              <div class="form-group"><label>Nombre de la empresa</label><input id="emp-nombre" oninput="marcarUnsaved()"></div>
+              <div class="form-group" style="margin-top:8px"><label>RUC / Teléfono</label><input id="emp-ruc" oninput="marcarUnsaved()"></div>
+              <div class="form-group" style="margin-top:8px"><label>Dirección</label><input id="emp-dir" oninput="marcarUnsaved()"></div>
+              <div class="form-group" style="margin-top:8px"><label>Logo (clic para cargar)</label>
+                <div class="logo-preview" id="logo-preview" onclick="cargarLogo()">+ Logo</div>
+                <input type="file" id="logo-input" accept="image/*" style="display:none" onchange="mostrarLogo(event)">
+              </div>
+            </div>
+            <div style="border-top:1px solid var(--borde);padding-top:10px">
+              <div class="form-group"><label>Nota al pie</label><textarea id="emp-nota" rows="2" style="resize:vertical" oninput="marcarUnsaved()"></textarea></div>
+              <div class="form-group" style="margin-top:8px"><label>Plazo de ejecución</label><input id="emp-plazo" oninput="marcarUnsaved()"></div>
+              <div class="form-group" style="margin-top:8px"><label>Forma de pago</label><input id="emp-pago" oninput="marcarUnsaved()"></div>
+              <div class="form-group" style="margin-top:8px"><label>Validez del presupuesto</label><input id="emp-validez" oninput="marcarUnsaved()"></div>
+            </div>
           </div>
         </div>
         <div class="card">
@@ -401,6 +422,7 @@ select option{background:var(--bg2);color:#E8F5EE}
             <label class="print-seccion on" onclick="toggleSeccion(this,'sec-portada')"><input type="checkbox" checked><div class="print-seccion-info"><h4>Portada / Encabezado</h4><p>Logo, empresa, proyecto y cliente</p></div></label>
             <label class="print-seccion on" onclick="toggleSeccion(this,'sec-detalle')"><input type="checkbox" checked><div class="print-seccion-info"><h4>Detalle de partidas</h4><p>Tabla con precios finales por capítulo</p></div></label>
             <label class="print-seccion on" onclick="toggleSeccion(this,'sec-letras')"><input type="checkbox" checked><div class="print-seccion-info"><h4>Total en letras</h4><p>Monto escrito en palabras</p></div></label>
+            <label class="print-seccion" onclick="toggleSeccion(this,'sec-nota-pct')"><input type="checkbox"><div class="print-seccion-info"><h4>Nota de porcentajes</h4><p>Muestra qué % se incluyó en el precio</p></div></label>
             <label class="print-seccion" onclick="toggleSeccion(this,'sec-caps')"><input type="checkbox"><div class="print-seccion-info"><h4>Resumen por capítulo</h4><p>Totales agrupados por rubro</p></div></label>
             <label class="print-seccion" onclick="toggleSeccion(this,'sec-apu')"><input type="checkbox"><div class="print-seccion-info"><h4>Análisis de Precios Unitarios</h4><p>Desglose de insumos tipo Mandua</p></div></label>
             <label class="print-seccion" onclick="toggleSeccion(this,'sec-condiciones')"><input type="checkbox"><div class="print-seccion-info"><h4>Condiciones generales</h4><p>Plazo, forma de pago y validez</p></div></label>
@@ -643,6 +665,7 @@ async function cargarDesdeFirebase(){
       if(snap.exists){
         const d=snap.data();
         DB=d.DB||[]; APU=d.APU||{}; PRESUPUESTO=d.PRESUPUESTO||[];
+        if(d.EMPRESAS){ EMPRESAS=d.EMPRESAS; empresaActivaId=d.empresaActivaId||null; renderEmpresasSel(); if(empresaActivaId)cargarEmpresa(); }
         if(d.config){
           setTimeout(()=>{
             if(d.config.pNombre)document.getElementById('p-nombre').value=d.config.pNombre;
@@ -703,7 +726,7 @@ async function guardarFirebase(){
       pctIva:document.getElementById('pct-iva').value,
       logo:logoDataURL||null,
     };
-    await db.collection('datos').doc('base').set({DB,APU,PRESUPUESTO,config,updatedBy:currentUser.email,updatedAt:firebase.firestore.FieldValue.serverTimestamp()});
+    await db.collection('datos').doc('base').set({DB,APU,PRESUPUESTO,EMPRESAS,empresaActivaId,config,updatedBy:currentUser.email,updatedAt:firebase.firestore.FieldValue.serverTimestamp()});
     hayUnsaved=false;
     btn.classList.add('saved'); btn.innerHTML='✓ Guardado';
     setSyncStatus(false);
@@ -1188,7 +1211,7 @@ function numeroALetras(n){
 const SECC_STATE={};
 function initSecciones(){
   ['sec-portada','sec-detalle','sec-letras','sec-firmas'].forEach(s=>SECC_STATE[s]=true);
-  ['sec-apu','sec-caps','sec-condiciones','sec-nota'].forEach(s=>SECC_STATE[s]=false);
+  ['sec-apu','sec-caps','sec-condiciones','sec-nota','sec-nota-pct'].forEach(s=>SECC_STATE[s]=false);
 }
 function toggleSeccion(label,secId){
   const cb=label.querySelector('input[type=checkbox]');
@@ -1289,8 +1312,11 @@ function generarDocHTML(){
     html+=`<div style="border:1px solid #ccc;border-radius:5px;padding:9px 13px;margin-top:8px;background:#f9f9f9">
       <span style="font-size:8pt;color:#666;font-weight:700;text-transform:uppercase;letter-spacing:.04em">Son: </span>
       <span style="font-size:9pt;color:#1B4432;font-weight:700">${numeroALetras(totalGeneral)} GUARANÍES</span>
-    </div>
-    <p style="font-size:7.5pt;color:#888;margin-top:6px;font-style:italic">* Precios unitarios incluyen: gastos indirectos (${gi}%), beneficio industrial (${bi}%) e IVA (${iva}%).</p>`;
+    </div>`;
+  }
+  if(SECC_STATE['sec-nota-pct']){
+    html+=`<p style="font-size:7.5pt;color:#888;margin-top:6px;font-style:italic">* Precios unitarios incluyen: gastos indirectos (${gi}%), beneficio industrial (${bi}%) e IVA (${iva}%).</p>`;
+  }
   }
 
   if(SECC_STATE['sec-caps']&&PRESUPUESTO.length){
@@ -1317,10 +1343,10 @@ function generarDocHTML(){
 
   if(SECC_STATE['sec-condiciones']){
     html+=`<h3 style="font-size:11pt;color:#1B4432;margin:14px 0 7px;border-bottom:2px solid #1B4432;padding-bottom:3px">Condiciones Generales</h3>
-    <table style="width:100%;border-collapse:collapse;font-size:9pt;border:1px solid #ddd;border-radius:5px">
-      <tr style="background:#f5faf7"><td style="padding:7px 12px;width:155px;font-weight:700;color:#1B4432;border-bottom:1px solid #eee">Plazo de ejecución</td><td style="padding:7px 12px;border-bottom:1px solid #eee">${empPlazo}</td></tr>
-      <tr><td style="padding:7px 12px;font-weight:700;color:#1B4432;border-bottom:1px solid #eee">Forma de pago</td><td style="padding:7px 12px;border-bottom:1px solid #eee">${empPago}</td></tr>
-      <tr style="background:#f5faf7"><td style="padding:7px 12px;font-weight:700;color:#1B4432">Validez</td><td style="padding:7px 12px">${empValidez}</td></tr>
+    <table style="width:100%;border-collapse:collapse;font-size:9pt;border:1px solid #ddd">
+      <tr style="background:#f5faf7"><td style="padding:7px 12px;width:155px;font-weight:700;color:#1B4432;border-bottom:1px solid #eee">Plazo de ejecución</td><td style="padding:7px 12px;border-bottom:1px solid #eee;color:#111">${empPlazo}</td></tr>
+      <tr style="background:#fff"><td style="padding:7px 12px;font-weight:700;color:#1B4432;border-bottom:1px solid #eee">Forma de pago</td><td style="padding:7px 12px;border-bottom:1px solid #eee;color:#111">${empPago}</td></tr>
+      <tr style="background:#f5faf7"><td style="padding:7px 12px;font-weight:700;color:#1B4432">Validez</td><td style="padding:7px 12px;color:#111">${empValidez}</td></tr>
     </table>`;
   }
 
@@ -1475,6 +1501,90 @@ auth.onAuthStateChanged(async user=>{
     document.getElementById('login-submit').disabled=false;
   }
 });
+
+// ═══════════════════════════════════════════════════════════════
+// MULTI-EMPRESA
+// ═══════════════════════════════════════════════════════════════
+let EMPRESAS = {}; // { id: {nombre, ruc, dir, logo, nota, plazo, pago, validez} }
+let empresaActivaId = null;
+
+function renderEmpresasSel(){
+  const sel = document.getElementById('empresa-sel');
+  sel.innerHTML = '<option value="">— Seleccioná una empresa —</option>';
+  Object.entries(EMPRESAS).forEach(([id, emp]) => {
+    const opt = document.createElement('option');
+    opt.value = id;
+    opt.textContent = emp.nombre || '(sin nombre)';
+    if(id === empresaActivaId) opt.selected = true;
+    sel.appendChild(opt);
+  });
+}
+
+function cargarEmpresa(){
+  const id = document.getElementById('empresa-sel').value;
+  if(!id) return;
+  empresaActivaId = id;
+  const emp = EMPRESAS[id];
+  document.getElementById('emp-nombre').value = emp.nombre || '';
+  document.getElementById('emp-ruc').value    = emp.ruc    || '';
+  document.getElementById('emp-dir').value    = emp.dir    || '';
+  document.getElementById('emp-nota').value   = emp.nota   || '';
+  document.getElementById('emp-plazo').value  = emp.plazo  || '';
+  document.getElementById('emp-pago').value   = emp.pago   || '';
+  document.getElementById('emp-validez').value= emp.validez|| '';
+  logoDataURL = emp.logo || null;
+  const prev = document.getElementById('logo-preview');
+  if(emp.logo) prev.innerHTML = `<img src="${emp.logo}" style="width:100%;height:100%;object-fit:contain;border-radius:6px">`;
+  else prev.innerHTML = '+ Logo';
+  generarPreview();
+}
+
+function agregarEmpresa(){
+  const nombre = prompt('Nombre de la nueva empresa:');
+  if(!nombre) return;
+  const id = 'emp_' + Date.now();
+  EMPRESAS[id] = {nombre, ruc:'', dir:'', logo:null, nota:'', plazo:'', pago:'', validez:''};
+  empresaActivaId = id;
+  renderEmpresasSel();
+  cargarEmpresa();
+  notif('✓ Empresa "'+nombre+'" creada');
+  marcarUnsaved();
+}
+
+function guardarEmpresaActual(){
+  if(!empresaActivaId){ notif('Seleccioná o creá una empresa primero','#E55'); return; }
+  EMPRESAS[empresaActivaId] = {
+    nombre: document.getElementById('emp-nombre').value,
+    ruc:    document.getElementById('emp-ruc').value,
+    dir:    document.getElementById('emp-dir').value,
+    nota:   document.getElementById('emp-nota').value,
+    plazo:  document.getElementById('emp-plazo').value,
+    pago:   document.getElementById('emp-pago').value,
+    validez:document.getElementById('emp-validez').value,
+    logo:   logoDataURL || null,
+  };
+  renderEmpresasSel();
+  marcarUnsaved();
+  notif('✓ Empresa guardada');
+}
+
+function eliminarEmpresaActual(){
+  if(!empresaActivaId){ notif('Seleccioná una empresa primero','#E55'); return; }
+  const nombre = EMPRESAS[empresaActivaId]?.nombre || '';
+  if(!confirm(`¿Eliminar la empresa "${nombre}"?`)) return;
+  delete EMPRESAS[empresaActivaId];
+  empresaActivaId = null;
+  logoDataURL = null;
+  ['emp-nombre','emp-ruc','emp-dir','emp-nota','emp-plazo','emp-pago','emp-validez'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('logo-preview').innerHTML = '+ Logo';
+  renderEmpresasSel();
+  marcarUnsaved();
+  notif('Empresa eliminada','#E55');
+}
+
+// Integrar EMPRESAS en guardarFirebase y cargarDesdeFirebase
+const _guardarOriginal = guardarFirebase;
+// ═══════════════════════════════════════════════════════════════
 
 // Ctrl+Z
 document.addEventListener('keydown',e=>{
