@@ -635,8 +635,7 @@ async function loginBtn(){
 
   try{
     const cred = await auth.signInWithEmailAndPassword(email, pass);
-    const user = cred.user;
-    currentUser = user;
+    const user = cred.user;    currentUser = user;
 
     // Verificar si está bloqueado
     const accesoConcedido = await registrarAcceso(user);
@@ -671,17 +670,21 @@ async function loginBtn(){
     actualizarBtnUndo();
 
   }catch(e){
-    console.error('Login error:', e.code, e.message);
+    console.error('Login error code:', e.code);
+    console.error('Login error message:', e.message);
     const msgs={
       'auth/user-not-found':'No existe una cuenta con ese correo',
       'auth/wrong-password':'Contraseña incorrecta',
       'auth/invalid-credential':'Correo o contraseña incorrectos',
       'auth/invalid-email':'El correo no tiene formato válido',
-      'auth/too-many-requests':'Demasiados intentos. Esperá unos minutos.',
-      'auth/user-disabled':'Tu acceso fue deshabilitado. Contactá al administrador.',
+      'auth/too-many-requests':'Demasiados intentos. Esperá unos minutos y volvé a intentar.',
+      'auth/user-disabled':'Tu acceso fue deshabilitado por el administrador.',
       'auth/network-request-failed':'Sin conexión a internet. Verificá tu red.',
+      'auth/operation-not-allowed':'El método de login no está habilitado en Firebase. Activá Email/Password en Authentication.',
+      'auth/configuration-not-found':'Firebase no está configurado correctamente. Verificá que el dominio esté autorizado.',
     };
-    err.textContent = msgs[e.code] || ('Error: ' + e.message);
+    // Mostrar el código exacto para diagnóstico
+    err.textContent = (msgs[e.code] || e.message) + ' [' + (e.code||'?') + ']';
     err.classList.add('visible');
     btn.textContent='Ingresar →'; btn.disabled=false;
   }
