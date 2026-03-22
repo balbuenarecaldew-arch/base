@@ -44,10 +44,11 @@ body{font-family:'Segoe UI',system-ui,sans-serif;font-size:15px;color:var(--txt)
 .login-field label{font-size:11px;font-weight:700;color:#6A9980;text-transform:uppercase;letter-spacing:.06em}
 .login-field input{padding:13px 16px;border-radius:10px;border:1px solid #2A2A2A;font-size:15px;color:#E8F5EE;background:#1A1A1A;transition:border .2s}
 .login-field input:focus{outline:none;border-color:#22C585;box-shadow:0 0 0 3px rgba(34,197,133,.15)}
-.pass-wrap{position:relative}
-.pass-wrap input{width:100%;padding-right:48px}
-.pass-eye{position:absolute;right:14px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:#6A9980;font-size:18px;padding:4px;line-height:1}
+.pass-wrap{position:relative;display:block}
+.pass-wrap input{width:100%;padding-right:52px;box-sizing:border-box}
+.pass-eye{position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:#6A9980;padding:6px;line-height:1;z-index:10;display:flex;align-items:center;justify-content:center}
 .pass-eye:hover{color:#22C585}
+.pass-eye svg{width:20px;height:20px;pointer-events:none}
 .login-btn{width:100%;padding:14px;background:#22C585;color:#0A1F14;border:none;border-radius:10px;font-size:15px;font-weight:800;cursor:pointer;margin-top:8px;transition:all .2s;letter-spacing:.02em}
 .login-btn:hover{background:#17906A;color:#fff}
 .login-btn:disabled{opacity:.6;cursor:not-allowed}
@@ -238,7 +239,9 @@ select option{background:var(--bg2);color:#E8F5EE}
       <div class="pass-wrap">
         <input type="password" id="login-pass" placeholder="••••••••"
           onkeydown="if(event.key==='Enter')loginBtn()">
-        <button class="pass-eye" type="button" onclick="togglePass()" id="pass-eye-btn" title="Mostrar/ocultar contraseña">👁</button>
+        <button class="pass-eye" type="button" id="pass-eye-btn" onclick="togglePass()" title="Mostrar/ocultar contraseña">
+          <svg id="eye-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+        </button>
       </div>
     </div>
     <button class="login-btn" onclick="loginBtn()" id="login-submit">Ingresar →</button>
@@ -1330,7 +1333,6 @@ function generarDocHTML(){
   }
   if(SECC_STATE['sec-nota-pct']){
     html+=`<p style="font-size:7.5pt;color:#888;margin-top:6px;font-style:italic">* Precios unitarios incluyen: gastos indirectos (${gi}%), beneficio industrial (${bi}%) e IVA (${iva}%).</p>`;
-  }
   }
 
   if(SECC_STATE['sec-caps']&&PRESUPUESTO.length){
