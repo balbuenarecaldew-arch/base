@@ -621,27 +621,55 @@ function togglePass(){
 }
 
 async function loginBtn(){
-  const email=document.getElementById('login-email').value.trim();
-  const pass =document.getElementById('login-pass').value;
-  const btn  =document.getElementById('login-submit');
-  const err  =document.getElementById('login-err');
+  const email = document.getElementById('login-email').value.trim();
+  const pass  = document.getElementById('login-pass').value;
+  const btn   = document.getElementById('login-submit');
+  const err   = document.getElementById('login-err');
 
   err.textContent=''; err.classList.remove('visible');
 
-  if(!email){
-    err.textContent='Ingresá tu correo electrónico';
-    err.classList.add('visible'); return;
-  }
-  if(!pass){
-    err.textContent='Ingresá tu contraseña';
-    err.classList.add('visible'); return;
-  }
+  if(!email){ err.textContent='Ingresá tu correo electrónico'; err.classList.add('visible'); return; }
+  if(!pass){  err.textContent='Ingresá tu contraseña';         err.classList.add('visible'); return; }
 
   btn.textContent='⏳ Ingresando...'; btn.disabled=true;
 
   try{
-    await auth.signInWithEmailAndPassword(email, pass);
-    // Si llega acá, el login fue exitoso — el auth listener toma el control
+    const cred = await auth.signInWithEmailAndPassword(email, pass);
+    const user = cred.user;
+    currentUser = user;
+
+    // Verificar si está bloqueado
+    const accesoConcedido = await registrarAcceso(user);
+    if(!accesoConcedido){
+      await auth.signOut();
+      err.textContent='Tu acceso fue bloqueado por el administrador.';
+      err.classList.add('visible');
+      btn.textContent='Ingresar →'; btn.disabled=false;
+      return;
+    }
+
+    // Verificar admin
+    isAdmin = await verificarAdmin(user);
+
+    // Abrir app
+    appAbierta = true;
+    document.getElementById('login-screen').style.display='none';
+    document.getElementById('app').style.display='block';
+    document.getElementById('user-email-display').textContent = user.email;
+
+    if(isAdmin){
+      document.getElementById('admin-badge').style.display='';
+      document.getElementById('tab-admin-btn').style.display='';
+      notif('⚡ Bienvenido, Administrador');
+    } else {
+      notif('✓ Bienvenido, ' + user.email.split('@')[0]);
+    }
+
+    cargarDesdeFirebase();
+    initSecciones();
+    document.getElementById('p-fecha').value = new Date().toISOString().split('T')[0];
+    actualizarBtnUndo();
+
   }catch(e){
     console.error('Login error:', e.code, e.message);
     const msgs={
@@ -649,10 +677,9 @@ async function loginBtn(){
       'auth/wrong-password':'Contraseña incorrecta',
       'auth/invalid-credential':'Correo o contraseña incorrectos',
       'auth/invalid-email':'El correo no tiene formato válido',
-      'auth/too-many-requests':'Demasiados intentos fallidos. Esperá unos minutos.',
+      'auth/too-many-requests':'Demasiados intentos. Esperá unos minutos.',
       'auth/user-disabled':'Tu acceso fue deshabilitado. Contactá al administrador.',
       'auth/network-request-failed':'Sin conexión a internet. Verificá tu red.',
-      'auth/internal-error':'Error interno. Intentá de nuevo.',
     };
     err.textContent = msgs[e.code] || ('Error: ' + e.message);
     err.classList.add('visible');
@@ -662,7 +689,19 @@ async function loginBtn(){
 
 function cerrarSesion(){
   if(!confirm('¿Cerrar sesión?'))return;
-  auth.signOut();
+  appAbierta = false;
+  currentUser = null;
+  auth.signOut().then(()=>{
+    document.getElementById('app').style.display='none';
+    document.getElementById('login-screen').style.display='flex';
+    document.getElementById('login-email').value='';
+    document.getElementById('login-pass').value='';
+    document.getElementById('login-err').textContent='';
+    document.getElementById('login-err').classList.remove('visible');
+    document.getElementById('login-submit').textContent='Ingresar →';
+    document.getElementById('login-submit').disabled=false;
+    notif('Sesión cerrada');
+  });
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1518,47 +1557,21 @@ async function verificarAdmin(user){
 }
 
 // Auth listener — único y definitivo
-// Siempre mostramos login primero — el usuario debe ingresar manualmente cada vez
-auth.signOut().catch(()=>{}); // Cerrar sesión previa al cargar la página
+// NO usamos onAuthStateChanged para abrir la app automáticamente
+// Solo lo usamos para detectar el cierre de sesión
+let appAbierta = false;
 
 auth.onAuthStateChanged(async user=>{
-  if(user){
-    currentUser = user;
-
-    // Verificar acceso
-    const accesoConcedido = await registrarAcceso(user);
-    if(!accesoConcedido) return; // fue bloqueado, salir
-
-    // Verificar si es admin
-    isAdmin = await verificarAdmin(user);
-
-    // Mostrar app
-    document.getElementById('login-screen').style.display='none';
-    document.getElementById('app').style.display='block';
-    document.getElementById('user-email-display').textContent = user.email;
-    document.getElementById('login-submit').textContent = 'Ingresar →';
-    document.getElementById('login-submit').disabled = false;
-
-    if(isAdmin){
-      document.getElementById('admin-badge').style.display='';
-      document.getElementById('tab-admin-btn').style.display='';
-      notif('⚡ Bienvenido, Administrador');
-    } else {
-      notif('✓ Bienvenido, ' + user.email.split('@')[0]);
-    }
-
-    cargarDesdeFirebase();
-    initSecciones();
-    document.getElementById('p-fecha').value = new Date().toISOString().split('T')[0];
-    actualizarBtnUndo();
-
-  } else {
+  if(!user){
+    // Sesión cerrada — volver al login
     currentUser = null;
+    appAbierta = false;
     document.getElementById('login-screen').style.display='flex';
     document.getElementById('app').style.display='none';
     document.getElementById('login-submit').textContent = 'Ingresar →';
     document.getElementById('login-submit').disabled = false;
   }
+  // Si hay usuario pero appAbierta=false, ignorar — esperamos que el usuario haga login manual
 });
 
 // ═══════════════════════════════════════════════════════════════
