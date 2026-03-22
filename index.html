@@ -379,7 +379,7 @@ select option{background:var(--bg2);color:#E8F5EE}
           <div class="res-row"><span style="color:var(--txt2)">Costo Directo</span><span style="font-family:'Courier New',monospace;font-weight:700" id="r-cd">₲ 0</span></div>
           <div class="res-row"><span style="color:var(--txt2)">Indirectos <input class="res-input" id="pct-gi" type="number" value="13" min="0" max="50" step="0.5" oninput="recalcResumen()">%</span><span style="font-family:'Courier New',monospace" id="r-gi">₲ 0</span></div>
           <div class="res-row" style="opacity:.5"><span>── Subtotal</span><span style="font-family:'Courier New',monospace" id="r-sub1">₲ 0</span></div>
-          <div class="res-row"><span style="color:var(--txt2)">B. Industrial <input class="res-input" id="pct-bi" type="number" value="6" min="0" max="30" step="0.5" oninput="recalcResumen()">%</span><span style="font-family:'Courier New',monospace" id="r-bi">₲ 0</span></div>
+          <div class="res-row"><span style="color:var(--txt2)">Beneficio <input class="res-input" id="pct-bi" type="number" value="6" min="0" max="30" step="0.5" oninput="recalcResumen()">%</span><span style="font-family:'Courier New',monospace" id="r-bi">₲ 0</span></div>
           <div class="res-row" style="opacity:.5"><span>── Subtotal</span><span style="font-family:'Courier New',monospace" id="r-sub2">₲ 0</span></div>
           <div class="res-row"><span style="color:var(--txt2)">IVA <input class="res-input" id="pct-iva" type="number" value="10" min="0" max="30" step="0.5" oninput="recalcResumen()">%</span><span style="font-family:'Courier New',monospace" id="r-iva">₲ 0</span></div>
           <div class="res-row total"><span>TOTAL OBRA</span><span style="font-family:'Courier New',monospace" id="r-total">₲ 0</span></div>
@@ -1332,7 +1332,7 @@ function generarDocHTML(){
     </div>`;
   }
   if(SECC_STATE['sec-nota-pct']){
-    html+=`<p style="font-size:7.5pt;color:#888;margin-top:6px;font-style:italic">* Precios unitarios incluyen: gastos indirectos (${gi}%), beneficio industrial (${bi}%) e IVA (${iva}%).</p>`;
+    html+=`<p style="font-size:7.5pt;color:#888;margin-top:6px;font-style:italic">* Precios unitarios incluyen: gastos indirectos (${gi}%), beneficio (${bi}%) e IVA (${iva}%).</p>`;
   }
 
   if(SECC_STATE['sec-caps']&&PRESUPUESTO.length){
@@ -1518,6 +1518,9 @@ async function verificarAdmin(user){
 }
 
 // Auth listener — único y definitivo
+// Siempre mostramos login primero — el usuario debe ingresar manualmente cada vez
+auth.signOut().catch(()=>{}); // Cerrar sesión previa al cargar la página
+
 auth.onAuthStateChanged(async user=>{
   if(user){
     currentUser = user;
@@ -1579,19 +1582,37 @@ function renderEmpresasSel(){
 function cargarEmpresa(){
   const id = document.getElementById('empresa-sel').value;
   if(!id) return;
+
+  // Guardar los datos actuales de la empresa anterior antes de cambiar
+  if(empresaActivaId && empresaActivaId !== id && EMPRESAS[empresaActivaId]){
+    EMPRESAS[empresaActivaId] = {
+      nombre: document.getElementById('emp-nombre').value,
+      ruc:    document.getElementById('emp-ruc').value,
+      dir:    document.getElementById('emp-dir').value,
+      nota:   document.getElementById('emp-nota').value,
+      plazo:  document.getElementById('emp-plazo').value,
+      pago:   document.getElementById('emp-pago').value,
+      validez:document.getElementById('emp-validez').value,
+      logo:   logoDataURL || null,
+    };
+  }
+
   empresaActivaId = id;
   const emp = EMPRESAS[id];
-  document.getElementById('emp-nombre').value = emp.nombre || '';
-  document.getElementById('emp-ruc').value    = emp.ruc    || '';
-  document.getElementById('emp-dir').value    = emp.dir    || '';
-  document.getElementById('emp-nota').value   = emp.nota   || '';
-  document.getElementById('emp-plazo').value  = emp.plazo  || '';
-  document.getElementById('emp-pago').value   = emp.pago   || '';
-  document.getElementById('emp-validez').value= emp.validez|| '';
+  if(!emp) return;
+
+  document.getElementById('emp-nombre').value  = emp.nombre  || '';
+  document.getElementById('emp-ruc').value     = emp.ruc     || '';
+  document.getElementById('emp-dir').value     = emp.dir     || '';
+  document.getElementById('emp-nota').value    = emp.nota    || '';
+  document.getElementById('emp-plazo').value   = emp.plazo   || '';
+  document.getElementById('emp-pago').value    = emp.pago    || '';
+  document.getElementById('emp-validez').value = emp.validez || '';
   logoDataURL = emp.logo || null;
   const prev = document.getElementById('logo-preview');
   if(emp.logo) prev.innerHTML = `<img src="${emp.logo}" style="width:100%;height:100%;object-fit:contain;border-radius:6px">`;
   else prev.innerHTML = '+ Logo';
+  notif('✓ Empresa cargada: ' + (emp.nombre || id));
   generarPreview();
 }
 
