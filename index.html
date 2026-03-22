@@ -78,14 +78,14 @@ body{font-family:'Segoe UI',system-ui,sans-serif;font-size:15px;color:var(--txt)
 .admin-badge{background:rgba(212,172,13,.15);color:var(--amarillo);border:1px solid rgba(212,172,13,.3);padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700}
 
 /* ═══ RAMOS ═══════════════════════════════════════════════════ */
-.ramos-bar{display:flex;gap:8px;flex-wrap:wrap;padding:12px 20px;background:var(--bg1);border-bottom:1px solid var(--borde);align-items:center}
+.ramos-bar{display:flex;gap:8px;flex-wrap:wrap;padding:12px 20px;background:var(--bg1);border-bottom:1px solid var(--borde);align-items:center;position:sticky;top:56px;z-index:99}
 .ramos-bar span{font-size:11px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.05em}
 .ramo-btn{padding:6px 14px;border-radius:20px;border:1px solid var(--borde2);color:var(--txt2);font-size:12px;font-weight:600;cursor:pointer;background:transparent;transition:all .15s}
 .ramo-btn:hover{border-color:var(--acento);color:var(--acento)}
 .ramo-btn.activo{color:#fff;border-color:transparent}
 
 /* ═══ TABS ════════════════════════════════════════════════════ */
-.tabs{display:flex;background:var(--bg1);border-bottom:1px solid var(--borde);padding:0 20px;overflow-x:auto}
+.tabs{display:flex;background:var(--bg1);border-bottom:1px solid var(--borde);padding:0 20px;overflow-x:auto;position:sticky;top:108px;z-index:98}
 .tab{padding:12px 20px;cursor:pointer;color:var(--txt3);font-size:13px;font-weight:600;border-bottom:3px solid transparent;white-space:nowrap;transition:all .15s}
 .tab:hover{color:var(--txt2)}
 .tab.active{color:var(--acento);border-bottom-color:var(--acento)}
@@ -114,7 +114,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;font-size:15px;color:var(--txt)
 /* ═══ TABLAS ══════════════════════════════════════════════════ */
 .tbl-wrap{overflow-x:auto}
 table{width:100%;border-collapse:collapse;min-width:500px}
-th{padding:9px 12px;text-align:left;font-size:11px;font-weight:700;color:#9DBFAD;background:#1A1A1A;border-bottom:1px solid #2A2A2A;white-space:nowrap;text-transform:uppercase;letter-spacing:.04em;position:sticky;top:0}
+th{padding:9px 12px;text-align:left;font-size:11px;font-weight:700;color:#9DBFAD;background:#1A1A1A;border-bottom:1px solid #2A2A2A;white-space:nowrap;text-transform:uppercase;letter-spacing:.04em;position:sticky;top:155px;z-index:97}
 td{padding:8px 12px;border-bottom:1px solid #2A2A2A;vertical-align:middle;font-size:14px;color:#E8F5EE}
 tr:hover td{background:#1A1A1A}
 .cap-row td{color:#fff!important;font-weight:700;font-size:12px;padding:8px 12px;text-transform:uppercase;letter-spacing:.04em;border-left:4px solid}
