@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" role="img" aria-label="PresupuestAPP v3">
+  <defs>
+    <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0%" stop-color="#0B140F"/>
+      <stop offset="100%" stop-color="#123524"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0%" stop-color="#1DBA7B"/>
+      <stop offset="100%" stop-color="#4AABEF"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <circle cx="950" cy="120" r="220" fill="#1DBA7B" opacity=".08"/>
+  <circle cx="1060" cy="510" r="180" fill="#4AABEF" opacity=".08"/>
+  <rect x="90" y="92" width="140" height="140" rx="28" fill="#0F1410" stroke="#1DBA7B" stroke-width="4"/>
+  <path d="M126 199V132l34-17 34 17v67" fill="none" stroke="url(#accent)" stroke-linecap="round" stroke-linejoin="round" stroke-width="12"/>
+  <path d="M139 168h41" stroke="#E2F0E8" stroke-linecap="round" stroke-width="12"/>
+  <path d="M160 147v41" stroke="#E2F0E8" stroke-linecap="round" stroke-width="12"/>
+  <text x="280" y="178" fill="#E2F0E8" font-family="DM Sans, Arial, sans-serif" font-size="72" font-weight="700">PresupuestAPP v3</text>
+  <text x="280" y="252" fill="#8FB09A" font-family="DM Sans, Arial, sans-serif" font-size="34">Base de datos de partidas con APU integrado</text>
+  <text x="90" y="410" fill="#E2F0E8" font-family="DM Sans, Arial, sans-serif" font-size="34">Dashboard, presupuesto activo, resumen, impresión, Excel y administración en una sola app.</text>
+  <g transform="translate(90 472)">
+    <rect width="300" height="94" rx="20" fill="#0F1410" stroke="#2E3D31"/>
+    <text x="28" y="39" fill="#8FB09A" font-family="DM Sans, Arial, sans-serif" font-size="24" font-weight="700">Costo Directo</text>
+    <text x="28" y="72" fill="#1DBA7B" font-family="DM Mono, monospace" font-size="34" font-weight="700">₲ 128.450.000</text>
+  </g>
+  <g transform="translate(430 472)">
+    <rect width="300" height="94" rx="20" fill="#0F1410" stroke="#2E3D31"/>
+    <text x="28" y="39" fill="#8FB09A" font-family="DM Sans, Arial, sans-serif" font-size="24" font-weight="700">Precio Unitario</text>
+    <text x="28" y="72" fill="#4AABEF" font-family="DM Mono, monospace" font-size="34" font-weight="700">₲ 1.845.900</text>
+  </g>
+  <g transform="translate(770 472)">
+    <rect width="300" height="94" rx="20" fill="#0F1410" stroke="#2E3D31"/>
+    <text x="28" y="39" fill="#8FB09A" font-family="DM Sans, Arial, sans-serif" font-size="24" font-weight="700">Insumos APU</text>
+    <text x="28" y="72" fill="#D4B820" font-family="DM Mono, monospace" font-size="34" font-weight="700">MAT · MO · EQ · SUB</text>
+  </g>
+</svg>

@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="PresupuestAPP">
+  <defs>
+    <linearGradient id="g" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0%" stop-color="#1DBA7B"/>
+      <stop offset="100%" stop-color="#158A5C"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="#0F1410"/>
+  <path d="M16 44V22l16-8 16 8v22H16Z" fill="url(#g)" opacity=".18"/>
+  <path d="M22 42V26l10-5 10 5v16" fill="none" stroke="#1DBA7B" stroke-linecap="round" stroke-linejoin="round" stroke-width="4"/>
+  <path d="M26 34h12" stroke="#E2F0E8" stroke-linecap="round" stroke-width="4"/>
+  <path d="M32 28v12" stroke="#E2F0E8" stroke-linecap="round" stroke-width="4"/>
+</svg>
