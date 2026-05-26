@@ -377,7 +377,25 @@ function exportarExcel(){
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // IMPORTAR EXCEL
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-function abrirImportarExcel(){ abrirModal('modal-importar'); }
+function resetImportPreview(){
+  _importData = [];
+  const preview = document.getElementById('import-preview');
+  const confirmBtn = document.getElementById('btn-confirmar-import');
+  const importFile = document.getElementById('import-file');
+  const table = document.getElementById('import-table');
+  const info = document.getElementById('import-info');
+
+  if(preview) preview.style.display = 'none';
+  if(confirmBtn) confirmBtn.style.display = 'none';
+  if(importFile) importFile.value = '';
+  if(table) table.innerHTML = '';
+  if(info) info.textContent = '';
+}
+
+function abrirImportarExcel(){
+  resetImportPreview();
+  abrirModal('modal-importar');
+}
 function dragOver(e){ e.preventDefault(); document.getElementById('import-drop-zone').classList.add('drag-over'); }
 function dragLeave(e){ document.getElementById('import-drop-zone').classList.remove('drag-over'); }
 function dropImport(e){
@@ -597,6 +615,113 @@ function buildImportPayloadFromWorkbook(wb){
   };
 }
 
+function getImportColorByIndex(index){
+  if(typeof COLORES_PRESET !== 'undefined' && Array.isArray(COLORES_PRESET) && COLORES_PRESET.length){
+    return COLORES_PRESET[index % COLORES_PRESET.length];
+  }
+  const fallback = ['#35506B','#48657F','#577A92','#678FA4','#76A4B6','#85B9C8'];
+  return fallback[index % fallback.length];
+}
+
+function buildImportedCapitulos(metaCapitulos, partidas){
+  if(Array.isArray(metaCapitulos) && metaCapitulos.length){
+    return metaCapitulos.map((cap, index)=>({
+      id: String(cap.id || '').padStart(2, '0'),
+      name: cap.name || `Capitulo ${String(cap.id || '').padStart(2, '0')}`,
+      color: cap.color || getImportColorByIndex(index),
+      ramos: Array.isArray(cap.ramos) && cap.ramos.length
+        ? [...new Set(['todos', ...cap.ramos])]
+        : ['todos'],
+    }));
+  }
+
+  const detectados = [];
+  const seen = new Map();
+  partidas.forEach(partida=>{
+    const capId = String(partida.cap || String(partida.cod || '').split('.')[0] || '01').padStart(2, '0');
+    const ramo = partida.ramo || 'civil';
+
+    if(!seen.has(capId)){
+      const nuevo = {
+        id: capId,
+        name: partida.capName || `Capitulo ${capId}`,
+        color: getImportColorByIndex(detectados.length),
+        ramos: ['todos', ramo],
+      };
+      seen.set(capId, nuevo);
+      detectados.push(nuevo);
+      return;
+    }
+
+    const actual = seen.get(capId);
+    actual.ramos = [...new Set([...(actual.ramos || ['todos']), ramo])];
+    if((!actual.name || /^Capitulo\s+\d+$/i.test(actual.name)) && partida.capName){
+      actual.name = partida.capName;
+    }
+  });
+
+  return detectados;
+}
+
+function sortImportedPartidas(partidas, capitulos){
+  const orderMap = new Map(capitulos.map((cap, index)=>[cap.id, index]));
+  return partidas.slice().sort((a, b)=>{
+    const orderA = orderMap.has(a.cap) ? orderMap.get(a.cap) : 9999;
+    const orderB = orderMap.has(b.cap) ? orderMap.get(b.cap) : 9999;
+    if(orderA !== orderB) return orderA - orderB;
+    return String(a.cod || '').localeCompare(String(b.cod || ''), 'es', { numeric: true });
+  });
+}
+
+function limpiarDatosOperativosActuales(){
+  DB = [];
+  APU = {};
+  CAPS = [];
+  PRESUPUESTO = [];
+  PRESUPUESTOS_GUARDADOS = [];
+  HISTORIAL = [];
+  presupuestoActivoGuardadoId = null;
+  if(typeof expandedPartidas !== 'undefined') expandedPartidas = new Set();
+  if(typeof collapsedCapitulos !== 'undefined') collapsedCapitulos = new Set();
+  if(typeof actualizarBtnUndo === 'function') actualizarBtnUndo();
+}
+
+function reemplazarBaseDesdeImportacion(partidas, metaCapitulos){
+  const capitulos = buildImportedCapitulos(metaCapitulos, partidas);
+  const partidasOrdenadas = sortImportedPartidas(partidas, capitulos);
+
+  limpiarDatosOperativosActuales();
+  CAPS = capitulos;
+
+  partidasOrdenadas.forEach((partida, index)=>{
+    const cleanPartida = {
+      id: index + 1,
+      cap: String(partida.cap || '01').padStart(2, '0'),
+      cod: partida.cod,
+      desc: partida.desc,
+      u: partida.u || 'un',
+      ramo: partida.ramo || 'civil',
+      mat: Math.round(partida.mat || 0),
+      mo: Math.round(partida.mo || 0),
+      eq: Math.round(partida.eq || 0),
+      sub: Math.round(partida.sub || 0),
+    };
+    DB.push(cleanPartida);
+
+    if(Array.isArray(partida.apu) && partida.apu.length){
+      APU[cleanPartida.cod.replace(/\./g, '_')] = partida.apu.map(item=>({
+        tipo: item.tipo || inferTipoInsumo('', item.desc),
+        desc: item.desc,
+        u: item.u || 'un',
+        qty: parseFloat(item.qty) || 0,
+        pu: Math.round(parseFloat(item.pu) || 0),
+      }));
+    }
+  });
+
+  if(typeof sanearEstadoApp === 'function') sanearEstadoApp();
+}
+
 function leerArchivoImport(file){
   const r=new FileReader(); r.onload=ev=>{
     try{
@@ -616,6 +741,7 @@ function leerArchivoImport(file){
         apuCount: payload.apuCount,
         hasBaseSheet: payload.hasBaseSheet,
         hasApuSheet: payload.hasApuSheet,
+        sourceName: file.name,
       };
 
       // Preview
@@ -623,7 +749,7 @@ function leerArchivoImport(file){
       const info=document.getElementById('import-info');
       const tbl=document.getElementById('import-table');
       const meta = _importData.meta;
-      info.textContent = `${_importData.length} partidas detectadas en "${file.name}"${meta.hasApuSheet ? ` | ${meta.apuCount} APUs` : ''}${meta.capitulos.length ? ` | ${meta.capitulos.length} capitulos` : ''}`;
+      info.textContent = `${_importData.length} partidas detectadas en "${file.name}"${meta.hasApuSheet ? ` | ${meta.apuCount} APUs` : ''}${meta.capitulos.length ? ` | ${meta.capitulos.length} capitulos` : ''}. Esta importacion reemplazara la base actual y ordenara las partidas por capitulo.`;
       let th='<thead><tr><th style="padding:5px 8px;background:var(--bg2);font-size:10px;color:var(--txt3)">Codigo</th><th style="padding:5px 8px;background:var(--bg2);font-size:10px;color:var(--txt3)">Descripcion</th><th style="padding:5px 8px;background:var(--bg2);font-size:10px;color:var(--txt3)">Ud.</th><th style="padding:5px 8px;background:var(--bg2);font-size:10px;color:var(--txt3);text-align:right">P. Unit. Gs.</th><th style="padding:5px 8px;background:var(--bg2);font-size:10px;color:var(--txt3);text-align:center">APU</th></tr></thead><tbody>';
       _importData.slice(0,10).forEach(r=>{
         const total = (r.mat || 0) + (r.mo || 0) + (r.eq || 0) + (r.sub || 0);
@@ -636,59 +762,27 @@ function leerArchivoImport(file){
     }catch(e){ notif('Error al leer el archivo: '+e.message,'#E05555'); }
   }; r.readAsBinaryString(file);
 }
-function confirmarImport(){
+async function confirmarImport(){
   if(!_importData.length) return;
   const meta = _importData.meta || {};
-  let agregadas=0, actualizadas=0;
+  const totalPartidas = _importData.length;
+  const totalCapitulos = buildImportedCapitulos(meta.capitulos || [], _importData).length;
+  const confirmMsg = `Se va a reemplazar la base operativa actual con "${meta.sourceName || 'el Excel seleccionado'}".\n\nEsto va a borrar:\n- Partidas actuales\n- APUs actuales\n- Presupuesto activo\n- Presupuestos guardados\n\nCapitulos detectados: ${totalCapitulos}\nPartidas detectadas: ${totalPartidas}\n\nDeseas continuar?`;
+  if(!confirm(confirmMsg)) return;
 
-  (meta.capitulos || []).forEach(cap=>{
-    ensureImportedCapitulo(cap.id, cap.name, cap.color, cap.ramos);
-  });
+  reemplazarBaseDesdeImportacion(_importData, meta.capitulos || []);
 
-  _importData.forEach(r=>{
-    const importedCapId = ensureImportedCapitulo(r.cap, r.capName, '', ['todos', r.ramo || 'civil']);
-    const existingIndex = DB.findIndex(p=>p.cod===r.cod);
-    const payload = {
-      cap: importedCapId,
-      cod: r.cod,
-      desc: r.desc,
-      u: r.u || 'un',
-      ramo: r.ramo || 'civil',
-      mat: Math.round(r.mat || 0),
-      mo: Math.round(r.mo || 0),
-      eq: Math.round(r.eq || 0),
-      sub: Math.round(r.sub || 0),
-    };
-
-    if(existingIndex === -1){
-      DB.push({
-        id: DB.length ? Math.max(...DB.map(p=>p.id)) + 1 : 1,
-        ...payload,
-      });
-      agregadas++;
-    } else {
-      DB[existingIndex] = { ...DB[existingIndex], ...payload };
-      actualizadas++;
-    }
-
-    if(Array.isArray(r.apu) && r.apu.length){
-      APU[r.cod.replace(/\./g, '_')] = r.apu.map(item=>({
-        tipo: item.tipo || inferTipoInsumo('', item.desc),
-        desc: item.desc,
-        u: item.u || 'un',
-        qty: parseFloat(item.qty) || 0,
-        pu: Math.round(parseFloat(item.pu) || 0),
-      }));
-    }
-  });
   cerrarModal('modal-importar');
-  marcarUnsaved(); renderBD(); renderDashboard();
+  marcarUnsaved();
+  renderBD();
+  renderDashboard();
   if(typeof renderPres === 'function') renderPres();
+  if(typeof renderGuardados === 'function') renderGuardados();
   if(typeof recalcResumen === 'function') recalcResumen();
-  _importData=[];
-  document.getElementById('import-preview').style.display='none';
-  document.getElementById('btn-confirmar-import').style.display='none';
-  notif(`${agregadas} partidas agregadas${actualizadas ? ` | ${actualizadas} actualizadas` : ''}`);
+  if(typeof generarPreview === 'function') generarPreview();
+  await guardarFirebase(true);
+  resetImportPreview();
+  notif(`Base reemplazada: ${totalPartidas} partidas en ${totalCapitulos} capitulos.`);
 }
 
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
