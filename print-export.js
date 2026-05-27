@@ -492,22 +492,74 @@ function parseBaseDatosSheetData(data){
     .filter(row=>row.cod && row.desc);
 }
 
+function parseCapituloHeading(value){
+  const text = normalizeExcelText(value)
+    .replace(/^[\s▸•·-]+/, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const match = text.match(/^cap[ií]tulo\s+(\d{1,2})\s*[:.-]\s*(.+)$/i);
+  if(!match) return null;
+  return {
+    id: match[1].padStart(2, '0'),
+    name: normalizeExcelText(match[2]),
+  };
+}
+
+function isApuBlockTitle(value){
+  const text = normalizeExcelText(value);
+  if(!text) return false;
+  const key = normalizeExcelKey(text);
+  return /^apu\s*#?\s*\d+\s*:/.test(key) || /^apu\b.*\d{1,2}\.\d{1,3}\s*[-–]/i.test(text);
+}
+
+function parseApuTitle(title, capId, localIndex){
+  const text = normalizeExcelText(title);
+  const afterColon = text.includes(':')
+    ? text.split(':').slice(1).join(':').trim()
+    : text.replace(/^apu\s*#?\s*\d+/i, '').trim();
+  const explicitCode = afterColon.match(/^(\d{1,2})\.(\d{1,3})\s*[-–]\s*(.+)$/)
+    || text.match(/(\d{1,2})\.(\d{1,3})\s*[-–]\s*(.+)$/);
+  let cod = '';
+  let desc = afterColon;
+
+  if(explicitCode){
+    cod = `${explicitCode[1].padStart(2, '0')}.${explicitCode[2].padStart(2, '0')}`;
+    desc = explicitCode[3];
+  }else if(capId){
+    cod = `${capId}.${String(localIndex || 1).padStart(2, '0')}`;
+  }
+
+  return {
+    cod,
+    desc: normalizeExcelText(desc).replace(/^[-–]\s*/, ''),
+  };
+}
+
 function parseApuSheetData(data){
   const bloques = [];
+  const chapterCounters = {};
+  let currentCapitulo = null;
   let i = 0;
 
   while(i < data.length){
     const firstCell = normalizeExcelText(data[i]?.[0] || '');
-    if(!/^apu\b/i.test(firstCell)){
+    const capituloHeading = parseCapituloHeading(firstCell);
+    if(capituloHeading){
+      currentCapitulo = capituloHeading;
+      if(!chapterCounters[currentCapitulo.id]) chapterCounters[currentCapitulo.id] = 0;
+      i++;
+      continue;
+    }
+
+    if(!isApuBlockTitle(firstCell)){
       i++;
       continue;
     }
 
     const title = firstCell;
-    const afterColon = title.includes(':') ? title.split(':').slice(1).join(':').trim() : title.trim();
-    const matchCode = afterColon.match(/^(\d{2}\.\d{2,3})\s*-\s*(.+)$/);
-    const code = matchCode ? matchCode[1] : '';
-    const desc = matchCode ? matchCode[2].trim() : afterColon;
+    const capId = currentCapitulo?.id || '';
+    if(capId) chapterCounters[capId] = (chapterCounters[capId] || 0) + 1;
+    const titleData = parseApuTitle(title, capId, capId ? chapterCounters[capId] : bloques.length + 1);
     const unit = normalizeExcelText(data[i]?.[5] || data[i]?.[6] || 'un') || 'un';
 
     let j = i + 1;
@@ -526,7 +578,11 @@ function parseApuSheetData(data){
         j++;
         break;
       }
-      if(/^apu\b/i.test(label)){
+      if(parseCapituloHeading(label)){
+        j--;
+        break;
+      }
+      if(isApuBlockTitle(label)){
         j--;
         break;
       }
@@ -555,11 +611,19 @@ function parseApuSheetData(data){
       j++;
     }
 
-    bloques.push({ cod: code, desc, u: unit, total, insumos });
+    bloques.push({
+      cod: titleData.cod,
+      cap: capId,
+      capName: currentCapitulo?.name || '',
+      desc: titleData.desc,
+      u: unit,
+      total,
+      insumos,
+    });
     i = j + 1;
   }
 
-  return bloques.filter(item=>item.desc && item.insumos.length);
+  return bloques.filter(item=>item.desc && (item.insumos.length || item.total > 0));
 }
 
 function buildImportPayloadFromWorkbook(wb){
@@ -585,20 +649,29 @@ function buildImportPayloadFromWorkbook(wb){
   });
 
   apuBloques.forEach((bloque, index)=>{
-    const apuTotals = {
-      mat: Math.round(bloque.insumos.filter(i=>i.tipo === 'M').reduce((acc, i)=>acc + (i.qty * i.pu), 0)),
-      mo: Math.round(bloque.insumos.filter(i=>i.tipo === 'L').reduce((acc, i)=>acc + (i.qty * i.pu), 0)),
-      eq: Math.round(bloque.insumos.filter(i=>i.tipo === 'E').reduce((acc, i)=>acc + (i.qty * i.pu), 0)),
-      sub: Math.round(bloque.insumos.filter(i=>i.tipo === 'S').reduce((acc, i)=>acc + (i.qty * i.pu), 0)),
-    };
+    const hasApuBreakdown = Array.isArray(bloque.insumos) && bloque.insumos.length > 0;
+    const apuTotals = hasApuBreakdown
+      ? {
+        mat: Math.round(bloque.insumos.filter(i=>i.tipo === 'M').reduce((acc, i)=>acc + (i.qty * i.pu), 0)),
+        mo: Math.round(bloque.insumos.filter(i=>i.tipo === 'L').reduce((acc, i)=>acc + (i.qty * i.pu), 0)),
+        eq: Math.round(bloque.insumos.filter(i=>i.tipo === 'E').reduce((acc, i)=>acc + (i.qty * i.pu), 0)),
+        sub: Math.round(bloque.insumos.filter(i=>i.tipo === 'S').reduce((acc, i)=>acc + (i.qty * i.pu), 0)),
+      }
+      : {
+        mat: Math.round(bloque.total || 0),
+        mo: 0,
+        eq: 0,
+        sub: 0,
+      };
     const existing = bloque.cod ? partidasMap.get(bloque.cod) : null;
-    const fallbackCode = `01.${String(index + 1).padStart(2, '0')}`;
+    const fallbackCap = String(bloque.cap || '01').padStart(2, '0');
+    const fallbackCode = `${fallbackCap}.${String(index + 1).padStart(2, '0')}`;
     const cod = bloque.cod || existing?.cod || fallbackCode;
-    const cap = existing?.cap || cod.split('.')[0] || '01';
+    const cap = existing?.cap || bloque.cap || cod.split('.')[0] || '01';
 
     partidasMap.set(cod, {
-      cap,
-      capName: existing?.capName || '',
+      cap: String(cap).padStart(2, '0'),
+      capName: existing?.capName || bloque.capName || '',
       cod,
       desc: existing?.desc || bloque.desc,
       u: existing?.u || bloque.u || 'un',
