@@ -96,7 +96,7 @@ function cerrarSesion(auto=false){
   // Desuscribir listener ANTES de signOut para evitar error de permisos
   if(_firestoreUnsub){ _firestoreUnsub(); _firestoreUnsub = null; }
   // Limpiar estado en memoria inmediatamente
-  DB=[]; APU={}; PRESUPUESTO=[]; HISTORIAL=[];
+  DB=[]; APU={}; CATALOGOS={ M: [], L: [], E: [], S: [] }; PRESUPUESTO=[]; HISTORIAL=[];
   hayUnsaved = false;
   _initialLoadDone = false;
   _ignorarProximoSnapshotPres = 0;

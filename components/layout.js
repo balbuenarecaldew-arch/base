@@ -12,6 +12,7 @@ function showTab(id, el){
   if(id==='imprimir') generarPreview();
   if(id==='admin') cargarUsuarios();
   if(id==='guardados') renderGuardados();
+  if(id==='recursos' && typeof renderRecursos === 'function') renderRecursos();
   if(id==='dashboard') setTimeout(()=>renderDashboard(), 30);
 }
 

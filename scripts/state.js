@@ -24,6 +24,7 @@ const RAMO_COLORS = {
 };
 
 let DB = [], APU = {}, PRESUPUESTO = [];
+let CATALOGOS = { M: [], L: [], E: [], S: [] };
 let HISTORIAL = [], hayUnsaved = false;
 let ramoActivo = 'todos', editPid = null, editInsCod = null, editInsIdx = null;
 let logoDataURL = null, currentUser = null, isAdmin = false;
@@ -62,7 +63,7 @@ window.addEventListener('offline', () => {
 function guardarCacheLocal(){
   try{
     if(typeof sanearEstadoApp === 'function') sanearEstadoApp();
-    const data = {DB,APU,PRESUPUESTO,CAPS,EMPRESAS,empresaActivaId,PRESUPUESTOS_GUARDADOS,
+    const data = {DB,APU,CATALOGOS,PRESUPUESTO,CAPS,EMPRESAS,empresaActivaId,PRESUPUESTOS_GUARDADOS,
       presupuesto_activo:{
         nombre:document.getElementById('p-nombre')?.value||'',
         cliente:document.getElementById('p-cliente')?.value||'',

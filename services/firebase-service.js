@@ -33,6 +33,7 @@ async function cargarDesdeFirebase(){
         const d = typeof sanitizeAppPayload === 'function' ? sanitizeAppPayload(snap.data()) : snap.data();
         DB = d.DB || [];
         APU = d.APU || {};
+        CATALOGOS = d.CATALOGOS || { M: [], L: [], E: [], S: [] };
 
         if(Date.now() >= _ignorarProximoSnapshotPres){
           PRESUPUESTO = d.PRESUPUESTO || [];
@@ -53,6 +54,7 @@ async function cargarDesdeFirebase(){
         }
 
         if(typeof sanearEstadoApp === 'function') sanearEstadoApp();
+        if(typeof sincronizarCatalogosConApu === 'function') sincronizarCatalogosConApu(false);
 
         if(d.config && !_initialLoadDone){
           setTimeout(() => {
@@ -78,6 +80,7 @@ async function cargarDesdeFirebase(){
 
         renderBD();
         renderPres();
+        if(typeof renderRecursos === 'function') renderRecursos();
         _initialLoadDone = true;
         setTimeout(()=>renderDashboard(), 50);
         guardarCacheLocal();
@@ -87,12 +90,15 @@ async function cargarDesdeFirebase(){
         if(cache && cache.DB && cache.DB.length){
           DB = cache.DB;
           APU = cache.APU || {};
+          CATALOGOS = cache.CATALOGOS || { M: [], L: [], E: [], S: [] };
           PRESUPUESTO = cache.PRESUPUESTO || [];
           if(cache.CAPS) CAPS = cache.CAPS;
           if(cache.PRESUPUESTOS_GUARDADOS) PRESUPUESTOS_GUARDADOS = cache.PRESUPUESTOS_GUARDADOS;
           if(typeof sanearEstadoApp === 'function') sanearEstadoApp();
+          if(typeof sincronizarCatalogosConApu === 'function') sincronizarCatalogosConApu(false);
           renderBD();
           renderPres();
+          if(typeof renderRecursos === 'function') renderRecursos();
           renderDashboard();
           notif('Usando cache local - ' + DB.length + ' partidas', '#E89020');
         } else {
@@ -107,12 +113,15 @@ async function cargarDesdeFirebase(){
     if(cache && cache.DB){
       DB = cache.DB;
       APU = cache.APU || {};
+      CATALOGOS = cache.CATALOGOS || { M: [], L: [], E: [], S: [] };
       PRESUPUESTO = cache.PRESUPUESTO || [];
       if(cache.CAPS) CAPS = cache.CAPS;
       if(cache.PRESUPUESTOS_GUARDADOS) PRESUPUESTOS_GUARDADOS = cache.PRESUPUESTOS_GUARDADOS;
       if(typeof sanearEstadoApp === 'function') sanearEstadoApp();
+      if(typeof sincronizarCatalogosConApu === 'function') sincronizarCatalogosConApu(false);
       renderBD();
       renderPres();
+      if(typeof renderRecursos === 'function') renderRecursos();
       renderDashboard();
       notif('Modo offline - usando datos locales', '#E89020');
     } else {
@@ -150,6 +159,7 @@ async function guardarFirebase(silencioso = false){
     await db.collection('datos').doc('base').set({
       DB,
       APU,
+      CATALOGOS,
       PRESUPUESTO,
       CAPS,
       EMPRESAS,
@@ -220,11 +230,13 @@ async function resetearDatos(){
   await db.collection('datos').doc('base').delete();
   DB = [];
   APU = {};
+  CATALOGOS = { M: [], L: [], E: [], S: [] };
   PRESUPUESTO = [];
   PRESUPUESTOS_GUARDADOS = [];
   localStorage.removeItem('presupuestapp_cache');
   renderBD();
   renderPres();
+  if(typeof renderRecursos === 'function') renderRecursos();
   renderGuardados();
   setTimeout(()=>renderDashboard(), 50);
   notif('Datos borrados', '#E05555');

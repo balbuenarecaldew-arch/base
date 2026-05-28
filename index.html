@@ -113,6 +113,7 @@
   <nav class="tabs" aria-label="Secciones principales">
     <div class="tab active" data-tab="dashboard" onclick="showTab('dashboard',this)">Dashboard</div>
     <div class="tab" data-tab="bd" onclick="showTab('bd',this)">Base de Datos</div>
+    <div class="tab" data-tab="recursos" onclick="showTab('recursos',this)">Recursos</div>
     <div class="tab" data-tab="pres" onclick="showTab('pres',this)">Presupuesto Activo</div>
     <div class="tab" data-tab="guardados" onclick="showTab('guardados',this)">Guardados</div>
     <div class="tab" data-tab="resumen" onclick="showTab('resumen',this)">Resumen</div>
@@ -167,6 +168,38 @@
             <th style="width:148px">Acciones</th>
           </tr></thead>
           <tbody id="bd-tbody"><tr><td colspan="11"><div class="loading"><div class="spinner"></div>Cargando...</div></td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- BASE DE RECURSOS -->
+  <section class="view" id="tab-recursos" aria-labelledby="heading-recursos">
+    <div class="card">
+      <div class="card-header">
+        <h2 id="heading-recursos">Base de Recursos</h2>
+        <div class="btns">
+          <input id="recursos-q" placeholder="Buscar recurso..." oninput="renderRecursos()" style="width:220px;padding:6px 11px;font-size:12px">
+          <button class="btn btn-secondary btn-sm" onclick="limpiarBusquedaRecursos()">Limpiar</button>
+          <button class="btn btn-primary" onclick="abrirModalRecurso()">+ Nuevo recurso</button>
+          <button class="btn btn-secondary" onclick="sincronizarCatalogosConApu(true); marcarUnsaved();">Sincronizar APUs</button>
+        </div>
+      </div>
+      <div class="card-body" style="padding-bottom:0">
+        <p class="section-lead" id="recursos-stats">Recursos maestros para materiales, mano de obra y equipos.</p>
+        <div class="resource-type-bar">
+          <button class="resource-type-btn activo" data-tipo="M" onclick="setRecursoTipo('M')">Insumos</button>
+          <button class="resource-type-btn" data-tipo="L" onclick="setRecursoTipo('L')">MDO</button>
+          <button class="resource-type-btn" data-tipo="E" onclick="setRecursoTipo('E')">Equipos</button>
+          <button class="resource-type-btn" data-tipo="S" onclick="setRecursoTipo('S')">Subcontratos</button>
+        </div>
+      </div>
+      <div class="tbl-wrap">
+        <table class="data-table">
+          <thead><tr>
+            <th>Tipo</th><th>Recurso</th><th>Unidad</th><th class="num">Precio ₲</th><th>Categoría</th><th class="num">Usos APU</th><th>Acciones</th>
+          </tr></thead>
+          <tbody id="recursos-tbody"><tr><td colspan="7"><div class="loading"><div class="spinner"></div>Cargando...</div></td></tr></tbody>
         </table>
       </div>
     </div>
@@ -400,7 +433,10 @@
         <select id="ai-u"><option>un</option><option>bo</option><option>m²</option><option>m³</option><option>ml</option><option>kg</option><option>l</option><option>gl</option><option>hr</option><option>jor</option><option>día</option><option>pq</option></select>
       </div>
       <div class="form-group"><label>Tipo</label>
-        <select id="ai-tipo"><option value="M">Material</option><option value="L">Mano de Obra</option><option value="E">Equipo</option><option value="S">Subcontrato</option></select>
+        <select id="ai-tipo" onchange="onTipoInsumoChange()"><option value="M">Material</option><option value="L">Mano de Obra</option><option value="E">Equipo</option><option value="S">Subcontrato</option></select>
+      </div>
+      <div class="form-group" style="grid-column:1/-1"><label>Recurso maestro</label>
+        <select id="ai-resource" onchange="aplicarRecursoSeleccionado()"></select>
       </div>
       <div class="form-group"><label>Cantidad / unidad partida</label><input id="ai-qty" type="number" min="0.001" step="0.001" value="1"></div>
       <div class="form-group"><label>Precio unit. insumo (₲)</label><input id="ai-pu" type="number" min="0" value="0"></div>
@@ -408,6 +444,29 @@
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="cerrarModal('modal-insumo')">Cancelar</button>
       <button class="btn btn-primary" onclick="guardarInsumo()">Guardar insumo</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Recurso -->
+<div class="modal-bg" id="modal-recurso">
+  <div class="modal">
+    <h2 id="mr-title">Nuevo recurso</h2>
+    <div class="form-grid">
+      <div class="form-group"><label>Tipo</label>
+        <select id="r-tipo"><option value="M">Insumo</option><option value="L">MDO</option><option value="E">Equipo</option><option value="S">Subcontrato</option></select>
+      </div>
+      <div class="form-group"><label>Unidad</label>
+        <select id="r-u"><option>un</option><option>bo</option><option>m²</option><option>m³</option><option>ml</option><option>kg</option><option>tn</option><option>l</option><option>gl</option><option>hr</option><option>jor</option><option>día</option><option>pq</option><option>m2</option><option>m3</option></select>
+      </div>
+      <div class="form-group" style="grid-column:1/-1"><label>Descripción</label><input id="r-desc" placeholder="ej: Cemento tipo 1"></div>
+      <div class="form-group"><label>Precio unitario (₲)</label><input id="r-pu" type="number" min="0" value="0"></div>
+      <div class="form-group"><label>Categoría</label><input id="r-categoria" placeholder="ej: Materiales básicos"></div>
+      <div class="form-group" style="grid-column:1/-1"><label>Grupo</label><input id="r-grupo" placeholder="ej: Cementos y agregados"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="cerrarModal('modal-recurso')">Cancelar</button>
+      <button class="btn btn-primary" onclick="guardarRecurso()">Guardar y aplicar</button>
     </div>
   </div>
 </div>
@@ -483,6 +542,7 @@
 <script defer src="components/layout.js"></script>
 <script defer src="components/dashboard.js"></script>
 <script defer src="components/database.js"></script>
+<script defer src="components/resources.js"></script>
 <script defer src="components/budget.js"></script>
 <script defer src="components/summary.js"></script>
 <script defer src="components/print-export.js"></script>

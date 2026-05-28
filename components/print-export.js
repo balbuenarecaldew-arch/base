@@ -255,6 +255,20 @@ function appendCapitulosSheet(wb){
   XLSX.utils.book_append_sheet(wb, ws, 'Capitulos');
 }
 
+function appendCatalogosSheet(wb){
+  if(typeof normalizarCatalogos === 'function') normalizarCatalogos();
+  const rows = [['Tipo','ID','Descripcion','Unidad','Precio Unitario','Categoria','Grupo']];
+  const labels = { M: 'Insumo', L: 'MDO', E: 'Equipo', S: 'Subcontrato' };
+  Object.keys(CATALOGOS || {}).forEach(tipo=>{
+    (CATALOGOS[tipo] || []).forEach(item=>{
+      rows.push([labels[tipo] || tipo, item.id, item.desc, item.u, item.pu, item.categoria || '', item.grupo || '']);
+    });
+  });
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{wch:14},{wch:12},{wch:54},{wch:10},{wch:16},{wch:28},{wch:32}];
+  XLSX.utils.book_append_sheet(wb, ws, 'Recursos');
+}
+
 function appendBaseDatosSheet(wb){
   const bd = [[
     'Capitulo ID',
@@ -365,6 +379,7 @@ function exportarExcel(){
   }
   const { wb } = getBudgetExportContext();
   appendCapitulosSheet(wb);
+  appendCatalogosSheet(wb);
   appendBaseDatosSheet(wb);
   appendPresupuestoSheet(wb);
   appendGuardadosSheet(wb);
@@ -699,8 +714,20 @@ function buildImportPayloadFromWorkbook(wb){
   const capitulosSheetName = findSheetName(wb, ['capitulos', 'capitulos base']);
   const baseSheetName = findSheetName(wb, ['base de datos', 'base datos']);
   const apuSheetName = findSheetName(wb, ['costeo (apus)', 'apu detallado', 'apu']);
+  const recursosSheetName = findSheetName(wb, ['recursos', 'catalogos', 'catalogos recursos']);
+  const manoObraSheetName = findSheetName(wb, ['mano de obra']);
+  const jornalesSheetName = findSheetName(wb, ['jornales']);
   const apuSheetData = apuSheetName
     ? XLSX.utils.sheet_to_json(wb.Sheets[apuSheetName], { header: 1, defval: '' })
+    : [];
+  const manoObraSheetData = manoObraSheetName
+    ? XLSX.utils.sheet_to_json(wb.Sheets[manoObraSheetName], { header: 1, defval: '' })
+    : [];
+  const jornalesSheetData = jornalesSheetName
+    ? XLSX.utils.sheet_to_json(wb.Sheets[jornalesSheetName], { header: 1, defval: '' })
+    : [];
+  const recursosSheetData = recursosSheetName
+    ? XLSX.utils.sheet_to_json(wb.Sheets[recursosSheetName], { header: 1, defval: '' })
     : [];
 
   const capitulos = capitulosSheetName
@@ -758,9 +785,13 @@ function buildImportPayloadFromWorkbook(wb){
   return {
     capitulos,
     partidas: Array.from(partidasMap.values()),
+    catalogos: typeof buildCatalogosFromWorkbookData === 'function'
+      ? buildCatalogosFromWorkbookData({ recursos: recursosSheetData, manoObra: manoObraSheetData, jornales: jornalesSheetData })
+      : null,
     apuCount: apuBloques.length,
     hasBaseSheet: Boolean(baseSheetName),
     hasApuSheet: Boolean(apuSheetName),
+    hasManoObraSheet: Boolean(manoObraSheetName),
   };
 }
 
@@ -905,6 +936,7 @@ function countPartidasByCapitulo(partidas){
 function limpiarDatosOperativosActuales(){
   DB = [];
   APU = {};
+  CATALOGOS = { M: [], L: [], E: [], S: [] };
   CAPS = [];
   PRESUPUESTO = [];
   PRESUPUESTOS_GUARDADOS = [];
@@ -915,13 +947,16 @@ function limpiarDatosOperativosActuales(){
   if(typeof actualizarBtnUndo === 'function') actualizarBtnUndo();
 }
 
-function reemplazarBaseDesdeImportacion(partidas, metaCapitulos){
+function reemplazarBaseDesdeImportacion(partidas, metaCapitulos, metaCatalogos){
   const normalized = normalizeImportedCapitulosAndPartidas(metaCapitulos, partidas);
   const capitulos = normalized.capitulos;
   const partidasOrdenadas = normalized.partidas;
 
   limpiarDatosOperativosActuales();
   CAPS = capitulos;
+  CATALOGOS = metaCatalogos && typeof catalogosShape === 'function'
+    ? catalogosShape(metaCatalogos)
+    : { M: [], L: [], E: [], S: [] };
 
   partidasOrdenadas.forEach((partida, index)=>{
     const cleanPartida = {
@@ -941,6 +976,7 @@ function reemplazarBaseDesdeImportacion(partidas, metaCapitulos){
     if(Array.isArray(partida.apu) && partida.apu.length){
       APU[cleanPartida.cod.replace(/\./g, '_')] = partida.apu.map(item=>({
         tipo: item.tipo || inferTipoInsumo('', item.desc),
+        resourceId: item.resourceId || '',
         desc: item.desc,
         u: item.u || 'un',
         qty: parseFloat(item.qty) || 0,
@@ -949,6 +985,7 @@ function reemplazarBaseDesdeImportacion(partidas, metaCapitulos){
     }
   });
 
+  if(typeof sincronizarCatalogosConApu === 'function') sincronizarCatalogosConApu(false);
   if(typeof sanearEstadoApp === 'function') sanearEstadoApp();
 }
 
@@ -972,6 +1009,8 @@ function leerArchivoImport(file){
         apuCount: payload.apuCount,
         hasBaseSheet: payload.hasBaseSheet,
         hasApuSheet: payload.hasApuSheet,
+        hasManoObraSheet: payload.hasManoObraSheet,
+        catalogos: payload.catalogos,
         sourceName: file.name,
         chapterCounts: countPartidasByCapitulo(normalized.partidas),
       };
@@ -986,7 +1025,10 @@ function leerArchivoImport(file){
         .slice(0, 6)
         .map(cap=>`${cap.id}:${meta.chapterCounts?.[cap.id] || 0}`)
         .join(' | ');
-      info.textContent = `${_importData.length} partidas detectadas en "${file.name}"${meta.hasApuSheet ? ` | ${meta.apuCount} APUs` : ''} | ${capCount} capitulos con partidas${capSummary ? ` (${capSummary}${meta.capitulos.length > 6 ? '...' : ''})` : ''}. Esta importacion reemplazara la base actual y ordenara las partidas por capitulo.`;
+      const recursoCount = meta.catalogos
+        ? Object.values(meta.catalogos).reduce((acc, items)=>acc + (Array.isArray(items) ? items.length : 0), 0)
+        : 0;
+      info.textContent = `${_importData.length} partidas detectadas en "${file.name}"${meta.hasApuSheet ? ` | ${meta.apuCount} APUs` : ''} | ${capCount} capitulos con partidas${capSummary ? ` (${capSummary}${meta.capitulos.length > 6 ? '...' : ''})` : ''}${recursoCount ? ` | ${recursoCount} recursos maestros` : ''}. Esta importacion reemplazara la base actual y ordenara las partidas por capitulo.`;
       if(_importData.length > 1 && capCount <= 1){
         notif('Atencion: el Excel se leyo en un solo capitulo. Revisá la estructura antes de confirmar.', '#E89020');
       }
@@ -1011,11 +1053,12 @@ async function confirmarImport(){
   const confirmMsg = `Se va a reemplazar la base operativa actual con "${meta.sourceName || 'el Excel seleccionado'}".\n\nEsto va a borrar:\n- Partidas actuales\n- APUs actuales\n- Presupuesto activo\n- Presupuestos guardados\n\nCapitulos detectados: ${totalCapitulos}\nPartidas detectadas: ${totalPartidas}\n\nDeseas continuar?`;
   if(!confirm(confirmMsg)) return;
 
-  reemplazarBaseDesdeImportacion(_importData, meta.capitulos || []);
+  reemplazarBaseDesdeImportacion(_importData, meta.capitulos || [], meta.catalogos || null);
 
   cerrarModal('modal-importar');
   marcarUnsaved();
   renderBD();
+  if(typeof renderRecursos === 'function') renderRecursos();
   renderDashboard();
   if(typeof renderPres === 'function') renderPres();
   if(typeof renderGuardados === 'function') renderGuardados();

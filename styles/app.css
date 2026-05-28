@@ -229,6 +229,14 @@ body{font-family:var(--font);font-size:16px;line-height:1.5;color:var(--txt);bac
 .btn-sm{padding:8px 12px;font-size:12px}
 .btn-xs{padding:6px 10px;font-size:11px;border-radius:9px}
 .btns{display:flex;gap:7px;flex-wrap:wrap;align-items:center}
+.resource-type-bar{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+.resource-type-btn{
+  padding:8px 13px;border-radius:999px;border:1px solid var(--borde2);
+  background:var(--bg2);color:var(--txt2);font-size:12px;font-weight:800;
+  font-family:var(--font);cursor:pointer;transition:var(--transition)
+}
+.resource-type-btn:hover{border-color:var(--acento);color:var(--acento)}
+.resource-type-btn.activo{background:var(--acento3);border-color:var(--acento2);color:var(--acento)}
 
 /* â•â•â• TABLAS â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 .tbl-wrap{overflow-x:auto;overflow-y:auto}

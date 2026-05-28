@@ -326,10 +326,12 @@ function renderTablaApuInline(partida, insumos, totals){
     const subtotal = Math.round(insumo.qty * insumo.pu);
     const pct = ((subtotal / total) * 100).toFixed(1);
     const meta = APU_TYPE_META[insumo.tipo] || APU_TYPE_META.M;
+    const recurso = typeof getRecursoById === 'function' ? getRecursoById(insumo.resourceId) : null;
+    const recursoChip = recurso ? '<span class="chip chip-success">maestro</span>' : '';
     return `
       <tr class="apu-inline-row" onclick="editarInsumo('${partida.cod}',${idx})">
         <td>${idx + 1}</td>
-        <td>${insumo.desc}</td>
+        <td>${insumo.desc}${recursoChip ? `<div class="cell-meta">${recursoChip}</div>` : ''}</td>
         <td class="cell-unit">${insumo.u}</td>
         <td><span class="bdg bdg-${insumo.tipo}">${meta.short}</span></td>
         <td class="num">${formatCantidad(insumo.qty)}</td>
@@ -537,6 +539,7 @@ function editarInsumo(cod, idx){
   document.getElementById('ai-tipo').value = insumo.tipo;
   document.getElementById('ai-qty').value = insumo.qty;
   document.getElementById('ai-pu').value = insumo.pu;
+  if(typeof actualizarSelectRecursosInsumo === 'function') actualizarSelectRecursosInsumo(insumo.tipo, insumo.resourceId || '');
   document.getElementById('mi-title').textContent = 'Editar Insumo';
 }
 
@@ -552,6 +555,9 @@ function _openIM(cod){
     document.getElementById('ai-tipo').value = 'M';
     document.getElementById('ai-qty').value = 1;
     document.getElementById('ai-pu').value = 0;
+  }
+  if(typeof actualizarSelectRecursosInsumo === 'function'){
+    actualizarSelectRecursosInsumo(document.getElementById('ai-tipo').value);
   }
   abrirModal('modal-insumo');
 }
@@ -589,6 +595,7 @@ function guardarInsumo(){
     qty,
     pu: toNonNegativeNumber(puInsumo),
   };
+  if(typeof recursoDesdeFormularioInsumo === 'function') recursoDesdeFormularioInsumo(insumo);
 
   const codKey = partidaKeyFromCode(cod);
   if(!APU[codKey]) APU[codKey] = [];

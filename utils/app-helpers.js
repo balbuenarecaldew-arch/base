@@ -132,6 +132,7 @@ function sanitizeApuMap(apu){
         ? items.map(item=>({
             ...item,
             tipo: sanitizeAppText(item.tipo || 'M'),
+            resourceId: sanitizeAppText(item.resourceId || ''),
             desc: sanitizeAppText(item.desc || ''),
             u: sanitizeAppText(item.u || 'un'),
             qty: parseFloat(item.qty) || 0,
@@ -140,6 +141,33 @@ function sanitizeApuMap(apu){
         : [],
     ])
   );
+}
+
+function sanitizeCatalogoItem(item, tipoFallback){
+  return {
+    ...item,
+    id: sanitizeAppText(item.id || ''),
+    tipo: sanitizeAppText(item.tipo || tipoFallback || 'M'),
+    desc: sanitizeAppText(item.desc || ''),
+    u: sanitizeAppText(item.u || 'un'),
+    pu: Math.round(parseFloat(item.pu) || 0),
+    categoria: sanitizeAppText(item.categoria || ''),
+    grupo: sanitizeAppText(item.grupo || ''),
+  };
+}
+
+function sanitizeCatalogosMap(catalogos){
+  const base = { M: [], L: [], E: [], S: [] };
+  if(!catalogos || typeof catalogos !== 'object') return base;
+
+  Object.keys(base).forEach(tipo=>{
+    const items = Array.isArray(catalogos[tipo]) ? catalogos[tipo] : [];
+    base[tipo] = items
+      .map(item=>sanitizeCatalogoItem(item || {}, tipo))
+      .filter(item=>item.id && item.desc);
+  });
+
+  return base;
 }
 
 function sanitizePresupuestoList(items){
@@ -156,6 +184,8 @@ function sanitizeAppPayload(payload){
 
   if(Array.isArray(data.DB)) data.DB = sanitizePartidasList(data.DB);
   if(data.APU) data.APU = sanitizeApuMap(data.APU);
+  if(data.CATALOGOS) data.CATALOGOS = sanitizeCatalogosMap(data.CATALOGOS);
+  if(data.catalogos) data.catalogos = sanitizeCatalogosMap(data.catalogos);
   if(Array.isArray(data.CAPS)) data.CAPS = sanitizeCapitulosList(data.CAPS);
   if(Array.isArray(data.PRESUPUESTO)) data.PRESUPUESTO = sanitizePresupuestoList(data.PRESUPUESTO);
   if(Array.isArray(data.PRESUPUESTOS_GUARDADOS)){
@@ -171,6 +201,7 @@ function sanitizeAppPayload(payload){
 function sanearEstadoApp(){
   if(typeof DB !== 'undefined') DB = sanitizePartidasList(DB);
   if(typeof APU !== 'undefined') APU = sanitizeApuMap(APU);
+  if(typeof CATALOGOS !== 'undefined') CATALOGOS = sanitizeCatalogosMap(CATALOGOS);
   if(typeof CAPS !== 'undefined') CAPS = sanitizeCapitulosList(CAPS);
   if(typeof PRESUPUESTO !== 'undefined') PRESUPUESTO = sanitizePresupuestoList(PRESUPUESTO);
   if(typeof PRESUPUESTOS_GUARDADOS !== 'undefined' && Array.isArray(PRESUPUESTOS_GUARDADOS)){
