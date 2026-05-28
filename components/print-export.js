@@ -1018,6 +1018,8 @@ function reemplazarBaseDesdeImportacion(partidas, metaCapitulos, metaCatalogos){
       desc: partida.desc,
       u: partida.u || 'un',
       ramo: partida.ramo || 'civil',
+      mdoCategoria: partida.mdoCategoria || partida.categoria || '',
+      mdoGrupo: partida.mdoGrupo || partida.grupo || '',
       mat: Math.round(partida.mat || 0),
       mo: Math.round(partida.mo || 0),
       eq: Math.round(partida.eq || 0),

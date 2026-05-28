@@ -37,12 +37,19 @@ function setRamo(r){
 
 function filtrarDB(){
   const q = String((document.getElementById('bd-search')||{}).value || '').trim().toLowerCase();
+  const modo = typeof bdModoActivo !== 'undefined' ? bdModoActivo : 'costeo';
+  const recursoIndex = modo === 'mdo' && typeof getMdoResourceIndex === 'function' ? getMdoResourceIndex() : null;
   return DB.filter(p=>{
+    const esMdo = typeof isManoObraPartida === 'function' ? isManoObraPartida(p) : false;
+    if(modo === 'mdo' && !esMdo) return false;
+    if(modo !== 'mdo' && esMdo) return false;
     const capRamos = capOf(p.cap).ramos || ['todos'];
-    const coincideRamo = ramoActivo==='todos' || capRamos.includes(ramoActivo) || (p.ramo&&p.ramo===ramoActivo);
+    const coincideRamo = modo === 'mdo' || ramoActivo==='todos' || capRamos.includes(ramoActivo) || (p.ramo&&p.ramo===ramoActivo);
     const desc = String(p.desc || '').toLowerCase();
     const cod = String(p.cod || '').toLowerCase();
-    const coincideTexto = !q || desc.includes(q) || cod.includes(q);
+    const meta = modo === 'mdo' && typeof getMdoMeta === 'function' ? getMdoMeta(p, recursoIndex) : null;
+    const metaText = meta ? `${meta.categoria} ${meta.grupo}`.toLowerCase() : '';
+    const coincideTexto = !q || desc.includes(q) || cod.includes(q) || metaText.includes(q);
     return coincideRamo && coincideTexto;
   });
 }

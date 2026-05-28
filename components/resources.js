@@ -209,7 +209,7 @@ function renderRecursos(force = false){
     })
     .sort((a,b)=>a.desc.localeCompare(b.desc, 'es', { numeric: true }));
 
-  document.querySelectorAll('.resource-type-btn').forEach(btn=>{
+  document.querySelectorAll('.resource-type-btn[data-tipo]').forEach(btn=>{
     btn.classList.toggle('activo', btn.dataset.tipo === recursoTipoActivo);
   });
 
@@ -494,6 +494,8 @@ function buildManoObraPartidasFromWorkbookData(data, capId){
       desc: recurso.desc,
       u: recurso.u || 'un',
       ramo: 'civil',
+      mdoCategoria: recurso.categoria || '',
+      mdoGrupo: recurso.grupo || '',
       mat: 0,
       mo: Math.round(parseFloat(recurso.pu) || 0),
       eq: 0,

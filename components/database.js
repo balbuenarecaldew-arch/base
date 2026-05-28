@@ -2,6 +2,7 @@
 let _bdDirty = true;
 let expandedPartidas = new Set();
 let collapsedCapitulos = new Set();
+let bdModoActivo = 'costeo';
 
 const APU_TYPE_META = {
   M: { label: 'Material', short: 'MAT', color: 'var(--azul)' },
@@ -20,6 +21,74 @@ function getPartidaApu(cod){
 
 function formatCantidad(valor){
   return Number.isInteger(valor) ? String(valor) : Number(valor || 0).toFixed(3);
+}
+
+function bdTextKey(value){
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+function isManoObraCapituloName(value){
+  const key = bdTextKey(value);
+  return key.includes('mano de obra') || key === 'mdo' || key.includes('jornales');
+}
+
+function isManoObraPartida(partida){
+  if(!partida) return false;
+  if(partida.mdoCategoria || partida.mdoGrupo) return true;
+  if(isManoObraCapituloName(partida.capName)) return true;
+  if(isManoObraCapituloName(capOf(partida.cap).name)) return true;
+  return false;
+}
+
+function setModoBaseDatos(modo){
+  bdModoActivo = modo === 'mdo' ? 'mdo' : 'costeo';
+  collapsedCapitulos.clear();
+  document.querySelectorAll('.bd-mode-btn').forEach(btn=>{
+    btn.classList.toggle('activo', btn.dataset.bdMode === bdModoActivo);
+  });
+  renderBD(true);
+}
+
+function getMdoResourceIndex(){
+  const map = new Map();
+  (CATALOGOS?.L || []).forEach(recurso=>{
+    const key = `${bdTextKey(recurso.desc)}|${bdTextKey(recurso.u)}`;
+    if(key !== '|') map.set(key, recurso);
+  });
+  return map;
+}
+
+function deriveMdoCategoria(desc){
+  const key = bdTextKey(desc);
+  const rules = [
+    ['Movimiento de tierra y excavaciones', ['excav', 'desmonte', 'relleno', 'compact', 'zanja', 'tierra', 'suelo']],
+    ['Demoliciones y retiros', ['demolic', 'retiro', 'sacar', 'desarme', 'desmontaje']],
+    ['Hormigon y estructuras', ['hormigon', 'h a', 'encofrado', 'armadura', 'zapata', 'viga', 'losa', 'columna']],
+    ['Albanileria y mamposteria', ['mamposter', 'ladrillo', 'bloque', 'muro', 'cimiento', 'revoque', 'contrapiso']],
+    ['Revestimientos y pisos', ['piso', 'ceram', 'porcelanato', 'baldosa', 'revest', 'azulejo']],
+    ['Cubiertas y techos', ['techo', 'cubierta', 'chapa', 'teja', 'canaleta']],
+    ['Carpinteria y aberturas', ['puerta', 'ventana', 'marco', 'carpinter']],
+    ['Herrerias y metalicas', ['metal', 'hierro', 'reja', 'porton', 'soldadura']],
+    ['Instalaciones sanitarias', ['sanitar', 'caneria', 'canilla', 'pileta', 'desague', 'pvc', 'registro']],
+    ['Instalaciones electricas', ['electric', 'cable', 'llave', 'toma', 'tablero', 'ducto']],
+    ['Pinturas e impermeabilizaciones', ['pint', 'impermeab', 'membrana', 'sellador']],
+  ];
+  const found = rules.find(([, words])=>words.some(word=>key.includes(word)));
+  return found ? found[0] : 'Mano de obra general';
+}
+
+function getMdoMeta(partida, recursoIndex = getMdoResourceIndex()){
+  const directCategoria = partida.mdoCategoria || partida.categoria || '';
+  const directGrupo = partida.mdoGrupo || partida.grupo || '';
+  const recurso = recursoIndex.get(`${bdTextKey(partida.desc)}|${bdTextKey(partida.u)}`);
+  const categoria = directCategoria || recurso?.categoria || deriveMdoCategoria(partida.desc);
+  const grupo = directGrupo || recurso?.grupo || '';
+  return { categoria, grupo };
 }
 
 function getApuTotals(insumos){
@@ -52,9 +121,15 @@ function expandirTodosCapitulosBD(){
 }
 
 function retraerTodosCapitulosBD(){
-  const visibles = filtrarDB().map(partida=>String(partida.cap));
-  const capIds = visibles.length ? visibles : CAPS.map(cap=>String(cap.id));
-  collapsedCapitulos = new Set(capIds);
+  if(bdModoActivo === 'mdo'){
+    collapsedCapitulos = new Set(buildMdoGrupos(filtrarDB()).map(grupo=>`mdo:${grupo.key}`));
+  }else{
+    const visibles = filtrarDB().map(partida=>String(partida.cap));
+    const capIds = visibles.length
+      ? visibles
+      : CAPS.filter(cap=>!isManoObraCapituloName(cap.name)).map(cap=>String(cap.id));
+    collapsedCapitulos = new Set(capIds);
+  }
   renderBD(true);
 }
 
@@ -137,6 +212,96 @@ function renderCapituloEmptyRow(capId){
   `;
 }
 
+function buildMdoGrupos(partidas){
+  const recursoIndex = getMdoResourceIndex();
+  const colors = ['#1A7A5A', '#1A5A8B', '#8A6A14', '#8A3070', '#6A6A6A', '#3A7A30', '#9B2020', '#5A4AAA'];
+  const groups = new Map();
+
+  (partidas || []).forEach(partida=>{
+    const meta = getMdoMeta(partida, recursoIndex);
+    const label = meta.categoria || 'Mano de obra general';
+    const key = bdTextKey(label) || 'general';
+    if(!groups.has(key)){
+      groups.set(key, {
+        key,
+        label,
+        color: colors[groups.size % colors.length],
+        partidas: [],
+      });
+    }
+    groups.get(key).partidas.push({ partida, meta });
+  });
+
+  return Array.from(groups.values())
+    .map((grupo, index)=>({
+      ...grupo,
+      id: `M${String(index + 1).padStart(2, '0')}`,
+      total: grupo.partidas.reduce((acc, item)=>acc + pu(item.partida), 0),
+    }))
+    .sort((a,b)=>a.label.localeCompare(b.label, 'es', { numeric: true }));
+}
+
+function renderMdoGrupoRow(grupo){
+  const collapsed = collapsedCapitulos.has(`mdo:${grupo.key}`);
+  return `
+    <tr class="cap-row cap-row-toggle" data-cap="${grupo.id}">
+      <td colspan="11" style="background:${grupo.color}CC">
+        <div class="cap-row-inner">
+          <button
+            type="button"
+            class="chapter-toggle ${collapsed ? '' : 'is-open'}"
+            onclick="toggleCapituloBD('mdo:${grupo.key}')"
+            aria-expanded="${collapsed ? 'false' : 'true'}"
+            title="${collapsed ? 'Expandir capitulo' : 'Replegar capitulo'}"
+          >
+            <span>${collapsed ? '+' : '-'}</span>
+          </button>
+          <div class="cap-row-copy">
+            <strong>${grupo.id} - ${grupo.label}</strong>
+            <span>${grupo.partidas.length} mano${grupo.partidas.length === 1 ? '' : 's'} de obra</span>
+          </div>
+          <div class="cap-row-total">Gs. ${fmtN(grupo.total)}</div>
+        </div>
+      </td>
+    </tr>
+  `;
+}
+
+function renderMdoBD(lista){
+  const grupos = buildMdoGrupos(lista);
+  if(!grupos.length){
+    document.getElementById('bd-tbody').innerHTML = `
+      <tr>
+        <td colspan="11">
+          <div class="empty-state" style="padding:48px 0">
+            <h3>Sin mano de obra</h3>
+            <p>Importa una planilla de mano de obra o agrega recursos MDO para crear esta base.</p>
+          </div>
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  let html = '';
+  grupos.forEach(grupo=>{
+    const collapsed = collapsedCapitulos.has(`mdo:${grupo.key}`);
+    html += renderMdoGrupoRow(grupo);
+    if(collapsed) return;
+    grupo.partidas.forEach(({ partida, meta })=>{
+      html += renderPartidaSummaryRow({
+        ...partida,
+        _mdoMeta: meta,
+      });
+      if(expandedPartidas.has(String(partida.id))){
+        html += renderDetallePartidaRow(partida, capOf(partida.cap), getPartidaApu(partida.cod));
+      }
+    });
+  });
+
+  document.getElementById('bd-tbody').innerHTML = html;
+}
+
 function _renderBDNow(force = false){
   if(!force && !isBDActive()){
     _bdDirty = true;
@@ -150,27 +315,40 @@ function _renderBDNow(force = false){
   const ramoFiltrado = ramoActivo !== 'todos';
   const clearBtn = document.getElementById('bd-clear-btn');
   const status = document.getElementById('bd-status-text');
+  const totalMdo = DB.filter(isManoObraPartida).length;
+  const totalCosteo = DB.length - totalMdo;
+
+  document.querySelectorAll('.bd-mode-btn').forEach(btn=>{
+    btn.classList.toggle('activo', btn.dataset.bdMode === bdModoActivo);
+  });
 
   if(clearBtn) clearBtn.style.display = q ? 'inline-flex' : 'none';
   if(status){
-    if(q && ramoFiltrado){
+    if(bdModoActivo === 'mdo'){
+      status.textContent = `Base exclusiva de mano de obra: ${lista.length} visibles de ${totalMdo}. Agrupada por capitulos de MDO segun categoria, grupo o descripcion.`;
+    } else if(q && ramoFiltrado){
       status.textContent = `Mostrando ${lista.length} de ${DB.length} partidas para "${q}" en ${getRamoLabel(ramoActivo)}.`;
     } else if(q){
-      status.textContent = `Mostrando ${lista.length} de ${DB.length} partidas para "${q}". Limpia el filtro para ver toda la base.`;
+      status.textContent = `Mostrando ${lista.length} de ${totalCosteo} partidas de costeo para "${q}". Limpia el filtro para ver toda la base.`;
     } else if(ramoFiltrado){
-      status.textContent = `Mostrando ${lista.length} de ${DB.length} partidas del ramo ${getRamoLabel(ramoActivo)}.`;
+      status.textContent = `Mostrando ${lista.length} de ${totalCosteo} partidas de costeo del ramo ${getRamoLabel(ramoActivo)}.`;
     } else {
-      status.textContent = 'Cada partida concentra su resumen económico y su desglose APU en el mismo lugar. Expandí una fila para ver, editar y recalcular insumos sin salir de la base.';
+      status.textContent = `Base de costeo: ${lista.length} visibles de ${totalCosteo}. La mano de obra queda separada en su propia base.`;
     }
   }
 
-  if(!lista.length && (q || ramoFiltrado)){
+  if(bdModoActivo === 'mdo'){
+    renderMdoBD(lista);
+    return;
+  }
+
+  if(!lista.length){
     document.getElementById('bd-tbody').innerHTML = `
       <tr>
         <td colspan="11">
           <div class="empty-state" style="padding:48px 0">
             <div class="icon">+</div>
-            <h3>Sin partidas</h3>
+            <h3>Sin partidas de costeo</h3>
             <p>No hay coincidencias con el filtro actual. Cambiá el ramo, limpiá la búsqueda o agregá una nueva partida.</p>
           </div>
         </td>
@@ -188,7 +366,9 @@ function _renderBDNow(force = false){
   const mostrarSoloGruposConResultados = q || ramoFiltrado;
   const grupos = mostrarSoloGruposConResultados
     ? Array.from(gruposMap.entries()).map(([capId, partidas])=>({ capId, partidas }))
-    : CAPS.map(cap=>({ capId: cap.id, partidas: gruposMap.get(cap.id) || [] }));
+    : CAPS
+      .filter(cap=>!isManoObraCapituloName(cap.name))
+      .map(cap=>({ capId: cap.id, partidas: gruposMap.get(cap.id) || [] }));
 
   let html = '';
 
@@ -220,6 +400,10 @@ function renderPartidaSummaryRow(partida){
   const ramoBadge = partida.ramo && partida.ramo !== 'todos'
     ? `<span class="chip" style="background:${RAMO_COLORS[partida.ramo] || '#888'}22;color:${RAMO_COLORS[partida.ramo] || '#888'}">${getRamoLabel(partida.ramo)}</span>`
     : '<span class="chip chip-muted">general</span>';
+  const mdoMeta = partida._mdoMeta || null;
+  const mdoBadge = mdoMeta
+    ? `<span class="chip chip-outline">${mdoMeta.grupo || mdoMeta.categoria}</span>`
+    : '';
   const presBadge = enPres
     ? `<span class="chip chip-success">En presupuesto | ${qtyPres % 1 === 0 ? qtyPres : qtyPres.toFixed(2)}</span>`
     : '';
@@ -242,6 +426,7 @@ function renderPartidaSummaryRow(partida){
       <td>
         <div class="cell-description">${partida.desc}</div>
         <div class="cell-meta">
+          ${mdoBadge}
           ${presBadge}
           <span class="chip chip-outline">${apu.length} insumo${apu.length === 1 ? '' : 's'}</span>
         </div>
