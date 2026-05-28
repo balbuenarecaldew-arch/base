@@ -1,4 +1,5 @@
 ﻿let _renderBDTimer = null;
+let _bdDirty = true;
 let expandedPartidas = new Set();
 let collapsedCapitulos = new Set();
 
@@ -45,9 +46,31 @@ function toggleCapituloBD(capId){
   renderBD();
 }
 
-function renderBD(){
+function expandirTodosCapitulosBD(){
+  collapsedCapitulos.clear();
+  renderBD(true);
+}
+
+function retraerTodosCapitulosBD(){
+  const visibles = filtrarDB().map(partida=>String(partida.cap));
+  const capIds = visibles.length ? visibles : CAPS.map(cap=>String(cap.id));
+  collapsedCapitulos = new Set(capIds);
+  renderBD(true);
+}
+
+function isBDActive(){
+  return document.getElementById('tab-bd')?.classList.contains('active');
+}
+
+function renderBD(force = false){
+  const badge = document.getElementById('badge-count');
+  if(badge) badge.textContent = `${DB.length} partidas`;
+  if(!force && !isBDActive()){
+    _bdDirty = true;
+    return;
+  }
   clearTimeout(_renderBDTimer);
-  _renderBDTimer = setTimeout(_renderBDNow, 50);
+  _renderBDTimer = setTimeout(()=>_renderBDNow(force), 50);
 }
 
 function limpiarBusquedaBD(){
@@ -114,7 +137,12 @@ function renderCapituloEmptyRow(capId){
   `;
 }
 
-function _renderBDNow(){
+function _renderBDNow(force = false){
+  if(!force && !isBDActive()){
+    _bdDirty = true;
+    return;
+  }
+  _bdDirty = false;
   document.getElementById('badge-count').textContent = `${DB.length} partidas`;
 
   const lista = filtrarDB();

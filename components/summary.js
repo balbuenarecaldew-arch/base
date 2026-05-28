@@ -19,12 +19,21 @@ function recalcResumen(){
   document.getElementById('r-iva').textContent = fmt(ivaV);
   document.getElementById('r-total').textContent = fmt(total);
 
+  const dbById = new Map(DB.map(p=>[p.id, p]));
   const byCap = {};
+  let matT = 0;
+  let moT = 0;
+  let eqT = 0;
+  let subT = 0;
   PRESUPUESTO.forEach(it => {
-    const p = DB.find(x => x.id === it.pid);
+    const p = dbById.get(it.pid);
     if(!p) return;
     if(!byCap[p.cap]) byCap[p.cap] = 0;
     byCap[p.cap] += pu(p) * it.qty;
+    matT += (p.mat || 0) * it.qty;
+    moT += (p.mo || 0) * it.qty;
+    eqT += (p.eq || 0) * it.qty;
+    subT += (p.sub || 0) * it.qty;
   });
 
   let cHtml = '';
@@ -40,23 +49,6 @@ function recalcResumen(){
     });
   }
   document.getElementById('res-caps').innerHTML = cHtml;
-
-  const matT = PRESUPUESTO.reduce((a, it) => {
-    const p = DB.find(x => x.id === it.pid);
-    return a + (p ? p.mat * it.qty : 0);
-  }, 0);
-  const moT = PRESUPUESTO.reduce((a, it) => {
-    const p = DB.find(x => x.id === it.pid);
-    return a + (p ? p.mo * it.qty : 0);
-  }, 0);
-  const eqT = PRESUPUESTO.reduce((a, it) => {
-    const p = DB.find(x => x.id === it.pid);
-    return a + (p ? p.eq * it.qty : 0);
-  }, 0);
-  const subT = PRESUPUESTO.reduce((a, it) => {
-    const p = DB.find(x => x.id === it.pid);
-    return a + (p ? p.sub * it.qty : 0);
-  }, 0);
 
   let tHtml = '';
   if(!cd){

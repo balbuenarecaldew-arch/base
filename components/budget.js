@@ -55,8 +55,20 @@ function getFactorBeneficios(){
   return { factor: (1 + gi / 100) * (1 + bi / 100) * (1 + iva / 100), gi, bi, iva };
 }
 
-function renderPres(){
+let _presDirty = true;
+
+function isPresActive(){
+  return document.getElementById('tab-pres')?.classList.contains('active');
+}
+
+function renderPres(force = false){
   const tbody = document.getElementById('pres-tbody');
+  if(!tbody) return;
+  if(!force && !isPresActive()){
+    _presDirty = true;
+    return;
+  }
+  _presDirty = false;
   if(!PRESUPUESTO.length){
     tbody.innerHTML = `<tr><td colspan="8"><div class="empty-state" style="padding:50px 0"><div class="icon">+</div><h3>Presupuesto vacio</h3><p>Clic en <strong style="color:var(--acento)">+ Agregar partida</strong> para comenzar</p></div></td></tr>`;
     document.getElementById('pres-cd').textContent = 'Gs. 0';
@@ -69,8 +81,9 @@ function renderPres(){
   document.getElementById('pres-factor-label').textContent = `GI ${gi}% | B ${bi}% | IVA ${iva}%`;
 
   const byCap = {};
+  const dbById = new Map(DB.map(p=>[p.id, p]));
   PRESUPUESTO.forEach(item => {
-    const p = DB.find(x => x.id === item.pid);
+    const p = dbById.get(item.pid);
     if(!p) return;
     if(!byCap[p.cap]) byCap[p.cap] = [];
     byCap[p.cap].push({ item, p });
@@ -134,8 +147,9 @@ function updQtyRapido(pid, val){
 
   const { factor } = getFactorBeneficios();
   let cd = 0;
+  const dbById = new Map(DB.map(p=>[p.id, p]));
   PRESUPUESTO.forEach(it => {
-    const p = DB.find(x => x.id === it.pid);
+    const p = dbById.get(it.pid);
     if(!p) return;
     const totalItem = pu(p) * it.qty;
     const totalItemFinal = Math.round(totalItem * factor);
@@ -206,8 +220,9 @@ function generarNroAuto(){
 }
 
 function cdTotal(){
+  const dbById = new Map(DB.map(p=>[p.id, p]));
   return PRESUPUESTO.reduce((a, it) => {
-    const p = DB.find(x => x.id === it.pid);
+    const p = dbById.get(it.pid);
     return a + (p ? pu(p) * it.qty : 0);
   }, 0);
 }

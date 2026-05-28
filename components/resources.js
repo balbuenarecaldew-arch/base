@@ -7,6 +7,16 @@ const RECURSO_TIPOS = {
 
 let recursoTipoActivo = 'M';
 let editRecursoId = null;
+let _recursoIndexCache = { catalogos: null, count: -1, map: new Map() };
+let _recursosDirty = true;
+
+function invalidateRecursoIndex(){
+  _recursoIndexCache = { catalogos: null, count: -1, map: new Map() };
+}
+
+function catalogosCount(){
+  return Object.values(catalogosShape(CATALOGOS)).reduce((acc, lista)=>acc + lista.length, 0);
+}
 
 function catalogosShape(catalogos){
   const base = { M: [], L: [], E: [], S: [] };
@@ -31,6 +41,7 @@ function normalizarCatalogos(){
         grupo: typeof sanitizeAppText === 'function' ? sanitizeAppText(item.grupo || '') : (item.grupo || ''),
       }));
   });
+  invalidateRecursoIndex();
 }
 
 function recursoKey(tipo, desc, unidad){
@@ -49,7 +60,17 @@ function getAllRecursos(){
 
 function getRecursoById(id){
   if(!id) return null;
-  return getAllRecursos().find(item=>item.id === id) || null;
+  const count = catalogosCount();
+  if(_recursoIndexCache.catalogos !== CATALOGOS || _recursoIndexCache.count !== count){
+    const map = new Map();
+    Object.values(catalogosShape(CATALOGOS)).forEach(lista=>{
+      lista.forEach(item=>{
+        if(item?.id) map.set(item.id, item);
+      });
+    });
+    _recursoIndexCache = { catalogos: CATALOGOS, count, map };
+  }
+  return _recursoIndexCache.map.get(id) || null;
 }
 
 function findRecursoByData(tipo, desc, unidad){
@@ -107,8 +128,9 @@ function sincronizarCatalogosConApu(renderizar = true){
 }
 
 function recalcularPartidasPorCodKeys(codKeys){
+  const byCodKey = new Map(DB.map(item=>[partidaKeyFromCode(item.cod), item]));
   (codKeys || new Set()).forEach(codKey=>{
-    const partida = DB.find(item=>partidaKeyFromCode(item.cod) === codKey);
+    const partida = byCodKey.get(codKey);
     if(partida) recalcDesdeAPU(partida.cod);
   });
 }
@@ -164,13 +186,23 @@ function limpiarBusquedaRecursos(){
   renderRecursos();
 }
 
-function renderRecursos(){
+function isRecursosActive(){
+  return document.getElementById('tab-recursos')?.classList.contains('active');
+}
+
+function renderRecursos(force = false){
   const tbody = document.getElementById('recursos-tbody');
   if(!tbody) return;
+  if(!force && !isRecursosActive()){
+    _recursosDirty = true;
+    return;
+  }
+  _recursosDirty = false;
 
   sincronizarCatalogosConApu(false);
+  const catalogos = catalogosShape(CATALOGOS);
   const q = normalizeExcelKey(document.getElementById('recursos-q')?.value || '');
-  const recursos = getRecursos(recursoTipoActivo)
+  const recursos = (catalogos[recursoTipoActivo] || [])
     .filter(item=>{
       const text = normalizeExcelKey(`${item.desc} ${item.u} ${item.categoria} ${item.grupo}`);
       return !q || text.includes(q);
@@ -183,9 +215,9 @@ function renderRecursos(){
 
   const stats = document.getElementById('recursos-stats');
   if(stats){
-    const total = getAllRecursos().length;
+    const total = Object.values(catalogos).reduce((acc, lista)=>acc + lista.length, 0);
     const tipoCounts = Object.keys(RECURSO_TIPOS)
-      .map(tipo=>`${RECURSO_TIPOS[tipo].label}: ${getRecursos(tipo).length}`)
+      .map(tipo=>`${RECURSO_TIPOS[tipo].label}: ${(catalogos[tipo] || []).length}`)
       .join(' | ');
     stats.textContent = `${total} recursos maestros | ${tipoCounts}`;
   }

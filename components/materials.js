@@ -25,8 +25,33 @@ function formatMaterialQty(value){
   });
 }
 
-function getMaterialInsumoData(insumo){
-  const recurso = typeof getRecursoById === 'function' ? getRecursoById(insumo.resourceId) : null;
+let _materialesRenderTimer = null;
+let _materialesDirty = true;
+
+function isMaterialesActive(){
+  return document.getElementById('tab-materiales')?.classList.contains('active');
+}
+
+function requestRenderMateriales(delay = 160){
+  _materialesDirty = true;
+  if(!isMaterialesActive()) return;
+  clearTimeout(_materialesRenderTimer);
+  _materialesRenderTimer = setTimeout(()=>renderMateriales(true), delay);
+}
+
+function getMaterialesRecursoMap(){
+  const map = new Map();
+  Object.values(CATALOGOS || {}).forEach(lista=>{
+    if(!Array.isArray(lista)) return;
+    lista.forEach(recurso=>{
+      if(recurso?.id) map.set(recurso.id, recurso);
+    });
+  });
+  return map;
+}
+
+function getMaterialInsumoData(insumo, recursosById){
+  const recurso = recursosById?.get(insumo.resourceId) || null;
   return {
     id: recurso?.id || insumo.resourceId || '',
     desc: recurso?.desc || insumo.desc || 'Material sin descripcion',
@@ -56,9 +81,11 @@ function buildMaterialesPresupuesto(){
   const capitulosMap = new Map();
   const sinApu = [];
   const partidasConMateriales = new Set();
+  const dbById = new Map((DB || []).map(partida=>[partida.id, partida]));
+  const recursosById = getMaterialesRecursoMap();
 
   (PRESUPUESTO || []).forEach(item=>{
-    const partida = DB.find(p=>p.id === item.pid);
+    const partida = dbById.get(item.pid);
     if(!partida) return;
 
     const cap = capOf(partida.cap);
@@ -89,7 +116,7 @@ function buildMaterialesPresupuesto(){
     capAcc.partidas.add(partida.id);
 
     materiales.forEach(insumo=>{
-      const material = getMaterialInsumoData(insumo);
+      const material = getMaterialInsumoData(insumo, recursosById);
       const qtyPorRubro = parseFloat(insumo.qty) || 0;
       const cantidadTotal = qtyPorRubro * qtyRubro;
       const total = cantidadTotal * material.pu;
@@ -181,9 +208,14 @@ function filtrarMaterialesLista(lista, q){
   return lista.filter(item=>materialTextKey(Object.values(item).join(' ')).includes(q));
 }
 
-function renderMateriales(){
+function renderMateriales(force = false){
   const stats = document.getElementById('mat-stats');
   if(!stats) return;
+  if(!force && !isMaterialesActive()){
+    _materialesDirty = true;
+    return;
+  }
+  _materialesDirty = false;
 
   const data = buildMaterialesPresupuesto();
   const q = materialTextKey(document.getElementById('materiales-q')?.value || '');
@@ -305,7 +337,7 @@ function renderMaterialesDetalle(detalle, q){
 function limpiarBusquedaMateriales(){
   const input = document.getElementById('materiales-q');
   if(input) input.value = '';
-  renderMateriales();
+  renderMateriales(true);
 }
 
 function appendMaterialesSheets(wb){

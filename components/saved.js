@@ -25,10 +25,11 @@ function renderGuardados(){
       <th style="padding:8px 12px;background:var(--bg2);width:180px;font-size:10px;color:var(--txt3);text-transform:uppercase;letter-spacing:.06em">Acciones</th>
     </tr></thead><tbody>`;
 
+  const dbById = new Map(DB.map(p=>[p.id, p]));
   lista.forEach(pres => {
     const realIdx = PRESUPUESTOS_GUARDADOS.indexOf(pres);
     const total = pres.items.reduce((a, it) => {
-      const p = DB.find(x => x.id === it.pid);
+      const p = dbById.get(it.pid);
       return a + (p ? pu(p) * it.qty : 0);
     }, 0);
     const esActivo = pres.id === presupuestoActivoGuardadoId;

@@ -150,6 +150,8 @@
         <div class="btns">
           <input id="bd-search" placeholder="Buscar código o descripción..." oninput="renderBD()" style="width:200px;padding:6px 11px;font-size:12px">
           <button class="btn btn-secondary btn-sm" id="bd-clear-btn" onclick="limpiarBusquedaBD()" style="display:none">Limpiar</button>
+          <button class="btn btn-secondary btn-sm" onclick="expandirTodosCapitulosBD()">Expandir capítulos</button>
+          <button class="btn btn-secondary btn-sm" onclick="retraerTodosCapitulosBD()">Retraer capítulos</button>
           <button class="btn btn-primary" onclick="abrirModalPartida()">+ Nueva partida</button>
           <button class="btn btn-secondary" onclick="abrirModalCaps()">Capítulos</button>
           <button class="btn btn-warning" onclick="abrirImportarExcel()">Cargar Excel maestro</button>
@@ -260,7 +262,7 @@
       <div class="card-header">
         <h2 id="heading-materiales">Planilla de Materiales</h2>
         <div class="btns">
-          <input id="materiales-q" placeholder="Buscar material o rubro..." oninput="renderMateriales()" style="width:240px;padding:6px 11px;font-size:12px">
+          <input id="materiales-q" placeholder="Buscar material o rubro..." oninput="requestRenderMateriales()" style="width:240px;padding:6px 11px;font-size:12px">
           <button class="btn btn-secondary btn-sm" onclick="limpiarBusquedaMateriales()">Limpiar</button>
           <button class="btn btn-export" onclick="exportarMaterialesExcel()">Excel materiales</button>
         </div>
@@ -459,7 +461,7 @@
         </select>
       </div>
       <div class="form-group"><label>Unidad</label>
-        <select id="f-u"><option>m²</option><option>m³</option><option>ml</option><option>kg</option><option>un</option><option>gl</option><option>hr</option><option>jor</option><option>bo</option><option>l</option><option>pq</option><option>día</option></select>
+        <select id="f-u"><option>m²</option><option>m³</option><option>ml</option><option>kg</option><option>un</option><option>gl</option><option>hr</option><option>jor</option><option>bo</option><option>l</option><option>pq</option><option>pulg</option><option>día</option></select>
       </div>
     </div>
     <div class="form-group" style="margin-bottom:12px"><label>Descripción</label><textarea id="f-desc" rows="2" style="resize:vertical"></textarea></div>
@@ -488,7 +490,7 @@
     <div class="form-grid">
       <div class="form-group" style="grid-column:1/-1"><label>Descripción del insumo</label><input id="ai-desc" placeholder="ej: Cemento Portland 50kg"></div>
       <div class="form-group"><label>Unidad</label>
-        <select id="ai-u"><option>un</option><option>bo</option><option>m²</option><option>m³</option><option>ml</option><option>kg</option><option>l</option><option>gl</option><option>hr</option><option>jor</option><option>día</option><option>pq</option></select>
+        <select id="ai-u"><option>un</option><option>bo</option><option>m²</option><option>m³</option><option>ml</option><option>kg</option><option>l</option><option>gl</option><option>hr</option><option>jor</option><option>día</option><option>pq</option><option>pulg</option></select>
       </div>
       <div class="form-group"><label>Tipo</label>
         <select id="ai-tipo" onchange="onTipoInsumoChange()"><option value="M">Material</option><option value="L">Mano de Obra</option><option value="E">Equipo</option><option value="S">Subcontrato</option></select>
@@ -515,7 +517,7 @@
         <select id="r-tipo"><option value="M">Insumo</option><option value="L">MDO</option><option value="E">Equipo</option><option value="S">Subcontrato</option></select>
       </div>
       <div class="form-group"><label>Unidad</label>
-        <select id="r-u"><option>un</option><option>bo</option><option>m²</option><option>m³</option><option>ml</option><option>kg</option><option>tn</option><option>l</option><option>gl</option><option>hr</option><option>jor</option><option>día</option><option>pq</option><option>m2</option><option>m3</option></select>
+        <select id="r-u"><option>un</option><option>bo</option><option>m²</option><option>m³</option><option>ml</option><option>kg</option><option>tn</option><option>l</option><option>gl</option><option>hr</option><option>jor</option><option>día</option><option>pq</option><option>pulg</option><option>m2</option><option>m3</option></select>
       </div>
       <div class="form-group" style="grid-column:1/-1"><label>Descripción</label><input id="r-desc" placeholder="ej: Cemento tipo 1"></div>
       <div class="form-group"><label>Precio unitario (₲)</label><input id="r-pu" type="number" min="0" value="0"></div>

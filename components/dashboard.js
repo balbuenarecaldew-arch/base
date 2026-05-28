@@ -22,7 +22,29 @@ function ensureDashboardCanvas(canvasId, fallbackMessage){
   return null;
 }
 
-function renderDashboard(){
+let _dashboardRenderTimer = null;
+let _dashboardDirty = true;
+
+function isDashboardActive(){
+  return document.getElementById('tab-dashboard')?.classList.contains('active');
+}
+
+function requestRenderDashboard(delay = 180){
+  _dashboardDirty = true;
+  if(!isDashboardActive()) return;
+  clearTimeout(_dashboardRenderTimer);
+  _dashboardRenderTimer = setTimeout(()=>renderDashboard(true), delay);
+}
+
+function renderDashboard(force = false){
+  if(!force && !isDashboardActive()){
+    _dashboardDirty = true;
+    return;
+  }
+  _dashboardDirty = false;
+  const statsHost = document.getElementById('dash-stats');
+  if(!statsHost) return;
+
   const gi = parseFloat(document.getElementById('pct-gi')?.value || '13') || 13;
   const bi = parseFloat(document.getElementById('pct-bi')?.value || '6') || 6;
   const iva = parseFloat(document.getElementById('pct-iva')?.value || '10') || 10;
@@ -30,7 +52,7 @@ function renderDashboard(){
   const factor = (1 + gi / 100) * (1 + bi / 100) * (1 + iva / 100);
   const total = Math.round(cd * factor);
 
-  document.getElementById('dash-stats').innerHTML = `
+  statsHost.innerHTML = `
     <div class="stat-card">
       <div class="stat-card-label">Costo Directo</div>
       <div class="stat-card-value" style="color:var(--acento);font-size:18px">${fmt(cd)}</div>
@@ -57,12 +79,21 @@ function renderDashboard(){
     </div>
   `;
 
+  const dbById = new Map(DB.map(p=>[p.id, p]));
   const byCap = {};
+  let matT = 0;
+  let moT = 0;
+  let eqT = 0;
+  let subT = 0;
   PRESUPUESTO.forEach(it => {
-    const p = DB.find(x => x.id === it.pid);
+    const p = dbById.get(it.pid);
     if(!p) return;
     if(!byCap[p.cap]) byCap[p.cap] = 0;
     byCap[p.cap] += pu(p) * it.qty;
+    matT += (p.mat || 0) * it.qty;
+    moT += (p.mo || 0) * it.qty;
+    eqT += (p.eq || 0) * it.qty;
+    subT += (p.sub || 0) * it.qty;
   });
 
   const capKeys = Object.keys(byCap).sort();
@@ -124,23 +155,6 @@ function renderDashboard(){
     }
   }
 
-  const matT = PRESUPUESTO.reduce((a, it) => {
-    const p = DB.find(x => x.id === it.pid);
-    return a + (p ? p.mat * it.qty : 0);
-  }, 0);
-  const moT = PRESUPUESTO.reduce((a, it) => {
-    const p = DB.find(x => x.id === it.pid);
-    return a + (p ? p.mo * it.qty : 0);
-  }, 0);
-  const eqT = PRESUPUESTO.reduce((a, it) => {
-    const p = DB.find(x => x.id === it.pid);
-    return a + (p ? p.eq * it.qty : 0);
-  }, 0);
-  const subT = PRESUPUESTO.reduce((a, it) => {
-    const p = DB.find(x => x.id === it.pid);
-    return a + (p ? p.sub * it.qty : 0);
-  }, 0);
-
   const ctxTipos = ensureDashboardCanvas('chart-tipos', 'chart-tipos host not found');
   if(ctxTipos){
     if(dashCharts.tipos){
@@ -199,7 +213,7 @@ function renderDashboard(){
 
   recientes.forEach((p, idx) => {
     const totalPres = p.items.reduce((a, it) => {
-      const db = DB.find(x => x.id === it.pid);
+      const db = dbById.get(it.pid);
       return a + (db ? pu(db) * it.qty : 0);
     }, 0);
     html += `

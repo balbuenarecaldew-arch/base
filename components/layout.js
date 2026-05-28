@@ -7,14 +7,15 @@ function showTab(id, el){
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
   document.getElementById('tab-'+id).classList.add('active');
   if(el) el.classList.add('active');
+  if(id==='bd') renderBD(true);
   if(id==='resumen') recalcResumen();
-  if(id==='pres') renderPres();
-  if(id==='materiales' && typeof renderMateriales === 'function') renderMateriales();
+  if(id==='pres') renderPres(true);
+  if(id==='materiales' && typeof renderMateriales === 'function') renderMateriales(true);
   if(id==='imprimir') generarPreview();
   if(id==='admin') cargarUsuarios();
   if(id==='guardados') renderGuardados();
-  if(id==='recursos' && typeof renderRecursos === 'function') renderRecursos();
-  if(id==='dashboard') setTimeout(()=>renderDashboard(), 30);
+  if(id==='recursos' && typeof renderRecursos === 'function') renderRecursos(true);
+  if(id==='dashboard') setTimeout(()=>renderDashboard(true), 30);
 }
 
 function setRamo(r){
