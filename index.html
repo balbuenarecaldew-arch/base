@@ -115,6 +115,7 @@
     <div class="tab" data-tab="bd" onclick="showTab('bd',this)">Base de Datos</div>
     <div class="tab" data-tab="recursos" onclick="showTab('recursos',this)">Recursos</div>
     <div class="tab" data-tab="pres" onclick="showTab('pres',this)">Presupuesto Activo</div>
+    <div class="tab" data-tab="materiales" onclick="showTab('materiales',this)">Materiales</div>
     <div class="tab" data-tab="guardados" onclick="showTab('guardados',this)">Guardados</div>
     <div class="tab" data-tab="resumen" onclick="showTab('resumen',this)">Resumen</div>
     <div class="tab" data-tab="imprimir" onclick="showTab('imprimir',this)">Imprimir</div>
@@ -249,6 +250,63 @@
           <span style="font-size:12px;color:var(--txt3)">Con GI+B+IVA <span id="pres-factor-label" style="color:var(--amarillo);font-size:10px;font-weight:700"></span>:</span>
           <span id="pres-total" style="font-size:18px;font-weight:700;color:var(--amarillo);font-family:'IBM Plex Mono',monospace">₲ 0</span>
         </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PLANILLA DE MATERIALES -->
+  <section class="view" id="tab-materiales" aria-labelledby="heading-materiales">
+    <div class="card">
+      <div class="card-header">
+        <h2 id="heading-materiales">Planilla de Materiales</h2>
+        <div class="btns">
+          <input id="materiales-q" placeholder="Buscar material o rubro..." oninput="renderMateriales()" style="width:240px;padding:6px 11px;font-size:12px">
+          <button class="btn btn-secondary btn-sm" onclick="limpiarBusquedaMateriales()">Limpiar</button>
+          <button class="btn btn-export" onclick="exportarMaterialesExcel()">Excel materiales</button>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="stat-cards" id="mat-stats"></div>
+        <div id="mat-alert"></div>
+      </div>
+    </div>
+
+    <div class="materials-grid">
+      <div class="card">
+        <div class="card-header"><h2>Resumen por capítulo</h2></div>
+        <div class="tbl-wrap">
+          <table class="data-table">
+            <thead><tr>
+              <th>Capítulo</th><th class="num">Rubros</th><th class="num">Líneas</th><th class="num">Materiales ₲</th><th class="num">Sin APU ₲</th>
+            </tr></thead>
+            <tbody id="mat-caps-tbody"><tr><td colspan="5"><div class="loading"><div class="spinner"></div>Cargando...</div></td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h2>Total general por material</h2></div>
+        <div class="tbl-wrap">
+          <table class="data-table">
+            <thead><tr>
+              <th>Material</th><th>Ud.</th><th class="num">Cantidad total</th><th class="num">Precio ref. ₲</th><th class="num">Total ₲</th><th class="num">Rubros</th>
+            </tr></thead>
+            <tbody id="mat-total-tbody"><tr><td colspan="6"><div class="loading"><div class="spinner"></div>Cargando...</div></td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2>Detalle por rubro del presupuesto</h2></div>
+      <div class="tbl-wrap">
+        <table class="data-table">
+          <thead><tr>
+            <th>Rubro</th><th>Descripción</th><th>Ud. rubro</th><th class="num">Cant. rubro</th>
+            <th>Material</th><th>Ud. mat.</th><th class="num">Cant./rubro</th><th class="num">Cantidad total</th><th class="num">Precio ₲</th><th class="num">Total ₲</th>
+          </tr></thead>
+          <tbody id="mat-detalle-tbody"><tr><td colspan="10"><div class="loading"><div class="spinner"></div>Cargando...</div></td></tr></tbody>
+        </table>
       </div>
     </div>
   </section>
@@ -544,6 +602,7 @@
 <script defer src="components/database.js"></script>
 <script defer src="components/resources.js"></script>
 <script defer src="components/budget.js"></script>
+<script defer src="components/materials.js"></script>
 <script defer src="components/summary.js"></script>
 <script defer src="components/print-export.js"></script>
 <script defer src="components/saved.js"></script>

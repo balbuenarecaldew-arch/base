@@ -1114,6 +1114,7 @@ async function confirmarImport(){
   if(typeof renderRecursos === 'function') renderRecursos();
   renderDashboard();
   if(typeof renderPres === 'function') renderPres();
+  if(typeof renderMateriales === 'function') renderMateriales();
   if(typeof renderGuardados === 'function') renderGuardados();
   if(typeof recalcResumen === 'function') recalcResumen();
   if(typeof generarPreview === 'function') generarPreview();

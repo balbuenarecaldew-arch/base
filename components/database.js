@@ -481,6 +481,8 @@ function guardarPartida(){
   cerrarModal('modal-partida');
   marcarUnsaved();
   renderBD();
+  renderPres();
+  if(typeof renderMateriales === 'function') renderMateriales();
   renderDashboard();
   notif(editPid ? 'Partida actualizada' : 'Partida agregada');
 }
@@ -510,6 +512,7 @@ function eliminarPartida(id){
   marcarUnsaved();
   renderBD();
   renderPres();
+  if(typeof renderMateriales === 'function') renderMateriales();
   renderDashboard();
   notif('Eliminada - Ctrl+Z para deshacer', '#E05555');
 }
@@ -619,6 +622,9 @@ function guardarInsumo(){
   cerrarModal('modal-insumo');
   marcarUnsaved();
   renderBD();
+  renderPres();
+  if(typeof renderMateriales === 'function') renderMateriales();
+  renderDashboard();
   notif('Insumo guardado');
 }
 
@@ -629,6 +635,9 @@ function eliminarInsumo(cod, idx){
   recalcDesdeAPU(cod);
   marcarUnsaved();
   renderBD();
+  renderPres();
+  if(typeof renderMateriales === 'function') renderMateriales();
+  renderDashboard();
   notif('Eliminado - Ctrl+Z para deshacer', '#E89020');
 }
 

@@ -290,6 +290,7 @@ function guardarRecurso(){
   renderRecursos();
   renderBD();
   renderPres();
+  if(typeof renderMateriales === 'function') renderMateriales();
   renderDashboard();
   notif(`Recurso guardado${cambios ? ` y aplicado a ${cambios} insumos` : ''}`);
 }
@@ -302,6 +303,7 @@ function aplicarPrecioRecurso(id){
   renderRecursos();
   renderBD();
   renderPres();
+  if(typeof renderMateriales === 'function') renderMateriales();
   renderDashboard();
   notif(cambios ? `${recurso.desc}: precio aplicado a ${cambios} insumos` : 'No hay APUs vinculados a ese recurso');
 }

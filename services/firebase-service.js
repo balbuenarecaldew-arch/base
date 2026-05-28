@@ -80,6 +80,7 @@ async function cargarDesdeFirebase(){
 
         renderBD();
         renderPres();
+        if(typeof renderMateriales === 'function') renderMateriales();
         if(typeof renderRecursos === 'function') renderRecursos();
         _initialLoadDone = true;
         setTimeout(()=>renderDashboard(), 50);
@@ -98,6 +99,7 @@ async function cargarDesdeFirebase(){
           if(typeof sincronizarCatalogosConApu === 'function') sincronizarCatalogosConApu(false);
           renderBD();
           renderPres();
+          if(typeof renderMateriales === 'function') renderMateriales();
           if(typeof renderRecursos === 'function') renderRecursos();
           renderDashboard();
           notif('Usando cache local - ' + DB.length + ' partidas', '#E89020');
@@ -121,6 +123,7 @@ async function cargarDesdeFirebase(){
       if(typeof sincronizarCatalogosConApu === 'function') sincronizarCatalogosConApu(false);
       renderBD();
       renderPres();
+      if(typeof renderMateriales === 'function') renderMateriales();
       if(typeof renderRecursos === 'function') renderRecursos();
       renderDashboard();
       notif('Modo offline - usando datos locales', '#E89020');
@@ -236,6 +239,7 @@ async function resetearDatos(){
   localStorage.removeItem('presupuestapp_cache');
   renderBD();
   renderPres();
+  if(typeof renderMateriales === 'function') renderMateriales();
   if(typeof renderRecursos === 'function') renderRecursos();
   renderGuardados();
   setTimeout(()=>renderDashboard(), 50);
@@ -285,11 +289,15 @@ function deshacerUltima(){
       if(action.datos.presItems) action.datos.presItems.forEach(item=>PRESUPUESTO.push(item));
       renderBD();
       renderPres();
+      if(typeof renderMateriales === 'function') renderMateriales();
       notif('Partida recuperada');
       break;
     case 'editPartida':
       DB[DB.findIndex(item=>item.id === action.datos.partida.id)] = action.datos.partida;
       renderBD();
+      renderPres();
+      if(typeof renderMateriales === 'function') renderMateriales();
+      renderDashboard();
       notif('Edicion revertida');
       break;
     case 'elimInsumo':
@@ -298,6 +306,9 @@ function deshacerUltima(){
       recalcDesdeAPU(action.datos.cod.replace('_', '.'));
       renderAPU();
       renderBD();
+      renderPres();
+      if(typeof renderMateriales === 'function') renderMateriales();
+      renderDashboard();
       notif('Insumo recuperado');
       break;
     case 'editInsumo':
@@ -306,17 +317,22 @@ function deshacerUltima(){
       recalcDesdeAPU(action.datos.cod.replace('_', '.'));
       renderAPU();
       renderBD();
+      renderPres();
+      if(typeof renderMateriales === 'function') renderMateriales();
+      renderDashboard();
       notif('Insumo revertido');
       break;
     case 'limpiarPres':
       PRESUPUESTO = action.datos.items;
       renderPres();
+      if(typeof renderMateriales === 'function') renderMateriales();
       renderBD();
       notif('Presupuesto restaurado');
       break;
     case 'quitarPres':
       PRESUPUESTO.push(action.datos.item);
       renderPres();
+      if(typeof renderMateriales === 'function') renderMateriales();
       renderBD();
       notif('Partida devuelta');
       break;
@@ -325,6 +341,7 @@ function deshacerUltima(){
       if(item){
         item.qty = action.datos.prevQty;
         renderPres();
+        if(typeof renderMateriales === 'function') renderMateriales();
         notif('Cantidad revertida');
       }
       break;

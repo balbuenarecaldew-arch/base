@@ -9,6 +9,7 @@ function showTab(id, el){
   if(el) el.classList.add('active');
   if(id==='resumen') recalcResumen();
   if(id==='pres') renderPres();
+  if(id==='materiales' && typeof renderMateriales === 'function') renderMateriales();
   if(id==='imprimir') generarPreview();
   if(id==='admin') cargarUsuarios();
   if(id==='guardados') renderGuardados();

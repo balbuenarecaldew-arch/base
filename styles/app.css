@@ -437,6 +437,15 @@ select option{background:var(--bg2);color:var(--txt)}
 .barra-fill{height:100%;border-radius:99px;transition:width .6s cubic-bezier(.4,0,.2,1)}
 .barra-val{font-size:10px;color:var(--txt3);min-width:120px;text-align:right;font-family:'IBM Plex Mono',monospace}
 
+/* Materiales */
+.materials-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);gap:14px;align-items:start}
+.materials-note{
+  padding:12px 14px;border-radius:var(--radio);border:1px solid var(--borde);
+  background:var(--bg2);color:var(--txt2);font-size:13px;font-weight:600
+}
+.materials-note.warning{border-color:rgba(232,144,32,.35);background:rgba(232,144,32,.1);color:#ffcf8a}
+.materials-note.ok{border-color:rgba(94,200,255,.25);background:rgba(94,200,255,.08);color:var(--acento)}
+
 /* â•â•â• PRINT DESIGNER â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 .print-seccion{
   border:1px solid var(--borde);border-radius:var(--radio);padding:10px 12px;
@@ -556,6 +565,7 @@ select option{background:var(--bg2);color:var(--txt)}
 @media(max-width:900px){
   #tab-imprimir > div { grid-template-columns: 1fr !important; }
   #tab-resumen > div { grid-template-columns: 1fr !important; }
+  .materials-grid{grid-template-columns:1fr}
   .stat-cards { grid-template-columns: repeat(2,1fr) !important; }
   .apu-inline-head,.apu-empty{flex-direction:column;align-items:stretch}
 }

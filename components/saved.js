@@ -109,6 +109,7 @@ async function guardarPresupuestoActual(){
   await guardarFirebase();
 
   renderPres();
+  if(typeof renderMateriales === 'function') renderMateriales();
   renderBD();
   renderGuardados();
   setTimeout(() => renderDashboard(), 50);
@@ -135,6 +136,7 @@ function abrirPresupuestoGuardado(idx){
 
   showTab('pres', getTabButton('pres'));
   renderPres();
+  if(typeof renderMateriales === 'function') renderMateriales();
   renderGuardados();
   renderDashboard();
   notif(`Presupuesto "${pres.nombre}" cargado`);
