@@ -428,6 +428,15 @@ function findSheetName(wb, aliases){
   });
 }
 
+function findSheetNameByData(wb, predicate, excludedNames){
+  const excluded = new Set((excludedNames || []).filter(Boolean));
+  return wb.SheetNames.find(name=>{
+    if(excluded.has(name)) return false;
+    const data = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, defval: '' });
+    return predicate(data, name);
+  });
+}
+
 function detectHeaderRow(data, keys, maxRows){
   const searchRows = Math.min(maxRows || 12, data.length);
   for(let i = 0; i < searchRows; i++){
@@ -710,12 +719,34 @@ function parseApuSheetData(data){
   return bloques.filter(item=>item.desc && (item.insumos.length || item.total > 0));
 }
 
+function resolveManoObraCapituloId(capitulos, partidas){
+  const existing = (capitulos || []).find(cap=>{
+    const key = normalizeExcelKey(cap.name || '');
+    return key.includes('mano de obra') || key === 'mdo';
+  });
+  if(existing?.id) return String(existing.id).padStart(2, '0');
+
+  const ids = [
+    ...(capitulos || []).map(cap=>cap.id),
+    ...(partidas || []).map(item=>item.cap || deriveCapIdFromCode(item.cod)),
+  ]
+    .map(id=>parseInt(String(id || '').match(/\d+/)?.[0] || '0', 10))
+    .filter(Number.isFinite);
+  const next = ids.length ? Math.max(...ids) + 1 : 1;
+  return String(next).padStart(2, '0');
+}
+
 function buildImportPayloadFromWorkbook(wb){
   const capitulosSheetName = findSheetName(wb, ['capitulos', 'capitulos base']);
   const baseSheetName = findSheetName(wb, ['base de datos', 'base datos']);
   const apuSheetName = findSheetName(wb, ['costeo (apus)', 'apu detallado', 'apu']);
   const recursosSheetName = findSheetName(wb, ['recursos', 'catalogos', 'catalogos recursos']);
-  const manoObraSheetName = findSheetName(wb, ['mano de obra']);
+  const manoObraSheetName = findSheetName(wb, ['mano de obra', 'mano obra', 'mdo', 'precios mano', 'labor'])
+    || findSheetNameByData(
+      wb,
+      data=>typeof isManoObraSheetData === 'function' && isManoObraSheetData(data),
+      [capitulosSheetName, baseSheetName, apuSheetName, recursosSheetName]
+    );
   const jornalesSheetName = findSheetName(wb, ['jornales']);
   const apuSheetData = apuSheetName
     ? XLSX.utils.sheet_to_json(wb.Sheets[apuSheetName], { header: 1, defval: '' })
@@ -730,7 +761,7 @@ function buildImportPayloadFromWorkbook(wb){
     ? XLSX.utils.sheet_to_json(wb.Sheets[recursosSheetName], { header: 1, defval: '' })
     : [];
 
-  const capitulos = capitulosSheetName
+  let capitulos = capitulosSheetName
     ? parseCapitulosSheetData(XLSX.utils.sheet_to_json(wb.Sheets[capitulosSheetName], { header: 1, defval: '' }))
     : detectApuSheetCapitulos(apuSheetData).map(({ rowIndex, ...cap })=>cap);
 
@@ -739,6 +770,22 @@ function buildImportPayloadFromWorkbook(wb){
     : [];
 
   const apuBloques = apuSheetName ? parseApuSheetData(apuSheetData) : [];
+  const manoObraCapId = resolveManoObraCapituloId(capitulos, [...basePartidas, ...apuBloques]);
+  const manoObraPartidas = typeof buildManoObraPartidasFromWorkbookData === 'function'
+    ? buildManoObraPartidasFromWorkbookData({ manoObra: manoObraSheetData, jornales: jornalesSheetData }, manoObraCapId)
+    : [];
+
+  if(manoObraPartidas.length && !capitulos.some(cap=>cap.id === manoObraCapId)){
+    capitulos = [
+      ...capitulos,
+      {
+        id: manoObraCapId,
+        name: 'MANO DE OBRA',
+        color: getImportColorByIndex(capitulos.length),
+        ramos: ['todos', 'civil'],
+      },
+    ];
+  }
 
   const partidasMap = new Map();
   basePartidas.forEach(item=>{
@@ -782,6 +829,10 @@ function buildImportPayloadFromWorkbook(wb){
     });
   });
 
+  manoObraPartidas.forEach(item=>{
+    if(!partidasMap.has(item.cod)) partidasMap.set(item.cod, item);
+  });
+
   return {
     capitulos,
     partidas: Array.from(partidasMap.values()),
@@ -792,6 +843,7 @@ function buildImportPayloadFromWorkbook(wb){
     hasBaseSheet: Boolean(baseSheetName),
     hasApuSheet: Boolean(apuSheetName),
     hasManoObraSheet: Boolean(manoObraSheetName),
+    manoObraCount: manoObraPartidas.length,
   };
 }
 
@@ -1010,6 +1062,7 @@ function leerArchivoImport(file){
         hasBaseSheet: payload.hasBaseSheet,
         hasApuSheet: payload.hasApuSheet,
         hasManoObraSheet: payload.hasManoObraSheet,
+        manoObraCount: payload.manoObraCount || 0,
         catalogos: payload.catalogos,
         sourceName: file.name,
         chapterCounts: countPartidasByCapitulo(normalized.partidas),
@@ -1028,7 +1081,7 @@ function leerArchivoImport(file){
       const recursoCount = meta.catalogos
         ? Object.values(meta.catalogos).reduce((acc, items)=>acc + (Array.isArray(items) ? items.length : 0), 0)
         : 0;
-      info.textContent = `${_importData.length} partidas detectadas en "${file.name}"${meta.hasApuSheet ? ` | ${meta.apuCount} APUs` : ''} | ${capCount} capitulos con partidas${capSummary ? ` (${capSummary}${meta.capitulos.length > 6 ? '...' : ''})` : ''}${recursoCount ? ` | ${recursoCount} recursos maestros` : ''}. Esta importacion reemplazara la base actual y ordenara las partidas por capitulo.`;
+      info.textContent = `${_importData.length} partidas detectadas en "${file.name}"${meta.hasApuSheet ? ` | ${meta.apuCount} APUs` : ''}${meta.manoObraCount ? ` | ${meta.manoObraCount} MDO` : ''} | ${capCount} capitulos con partidas${capSummary ? ` (${capSummary}${meta.capitulos.length > 6 ? '...' : ''})` : ''}${recursoCount ? ` | ${recursoCount} recursos maestros` : ''}. Esta importacion reemplazara la base actual y ordenara las partidas por capitulo.`;
       if(_importData.length > 1 && capCount <= 1){
         notif('Atencion: el Excel se leyo en un solo capitulo. Revisá la estructura antes de confirmar.', '#E89020');
       }

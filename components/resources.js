@@ -344,10 +344,72 @@ function recursoDesdeFormularioInsumo(insumo){
   return ensureRecursoParaInsumo(insumo, false);
 }
 
+function findResourceHeaderRow(data, options = {}){
+  const descAliases = options.descAliases || ['item', 'ítem', 'descripcion', 'descripción', 'concepto', 'actividad', 'tarea'];
+  const unitAliases = options.unitAliases || ['unidad', 'ud'];
+  const priceAliases = options.priceAliases || ['costo', 'precio', 'monto', 'jornal', 'mano de obra'];
+  const maxRows = Math.min(options.maxRows || 15, (data || []).length);
+
+  for(let i = 0; i < maxRows; i++){
+    const row = (data[i] || []).map(normalizeExcelKey);
+    const hasDesc = row.some(cell=>descAliases.some(alias=>cell.includes(normalizeExcelKey(alias))));
+    const hasUnit = row.some(cell=>unitAliases.some(alias=>cell.includes(normalizeExcelKey(alias))));
+    const hasPrice = row.some(cell=>priceAliases.some(alias=>cell.includes(normalizeExcelKey(alias))));
+    if(hasDesc && hasUnit && hasPrice) return i;
+  }
+  return -1;
+}
+
+function isManoObraSheetData(data){
+  return findResourceHeaderRow(data) >= 0;
+}
+
 function parseManoObraSheetData(data){
   const recursos = [];
+  const headerRow = findResourceHeaderRow(data || []);
   let categoria = '';
   let grupo = '';
+
+  if(headerRow >= 0){
+    const headers = data[headerRow].map(normalizeExcelKey);
+    const findIndex = aliases=>headers.findIndex(h=>aliases.some(alias=>h.includes(normalizeExcelKey(alias))));
+    const idxCategoria = findIndex(['categoria', 'categoría', 'capitulo', 'capítulo', 'rubro', 'seccion', 'sección']);
+    const idxGrupo = findIndex(['subcategoria', 'subcategoría', 'grupo']);
+    const idxItem = findIndex(['item', 'ítem', 'descripcion', 'descripción', 'concepto', 'actividad', 'tarea']);
+    const idxUnidad = findIndex(['unidad', 'ud']);
+    const idxPrecio = findIndex(['costo', 'precio', 'monto', 'jornal', 'mano de obra']);
+
+    data.slice(headerRow + 1).forEach(row=>{
+      const firstCell = normalizeExcelText(row?.[0] || '');
+      const onlyFirstCol = firstCell && !(row || []).slice(1).some(cell=>normalizeExcelText(cell));
+      if(onlyFirstCol){
+        const clean = firstCell.replace(/^[\s▸•·-]+/, '').replace(/\s+/g, ' ').trim();
+        if(clean === clean.toUpperCase()) categoria = clean;
+        else grupo = clean;
+        return;
+      }
+
+      const rowCategoria = idxCategoria >= 0 ? normalizeExcelText(row[idxCategoria] || '') : '';
+      const rowGrupo = idxGrupo >= 0 ? normalizeExcelText(row[idxGrupo] || '') : '';
+      const item = normalizeExcelText(row[idxItem] || '');
+      const unidad = normalizeExcelText(row[idxUnidad] || '');
+      const precio = parseExcelNumber(row[idxPrecio]);
+      if(rowCategoria) categoria = rowCategoria;
+      if(rowGrupo) grupo = rowGrupo;
+      if(!item || !unidad || !(precio > 0)) return;
+
+      recursos.push({
+        tipo: 'L',
+        desc: grupo ? `${grupo} - ${item}` : item,
+        u: unidad,
+        pu: precio,
+        categoria,
+        grupo,
+      });
+    });
+
+    return recursos;
+  }
 
   (data || []).forEach(row=>{
     const col0 = normalizeExcelText(row?.[0] || '');
@@ -375,6 +437,42 @@ function parseManoObraSheetData(data){
   });
 
   return recursos;
+}
+
+function buildManoObraPartidasFromWorkbookData(data, capId){
+  const recursos = [
+    ...parseManoObraSheetData(data?.manoObra || []),
+    ...parseJornalesSheetData(data?.jornales || []),
+  ];
+  const seen = new Set();
+
+  return recursos
+    .filter(recurso=>{
+      const key = recursoKey('L', recurso.desc, recurso.u);
+      if(seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .map((recurso, index)=>({
+      cap: capId,
+      capName: 'MANO DE OBRA',
+      cod: `${capId}.${String(index + 1).padStart(3, '0')}`,
+      desc: recurso.desc,
+      u: recurso.u || 'un',
+      ramo: 'civil',
+      mat: 0,
+      mo: Math.round(parseFloat(recurso.pu) || 0),
+      eq: 0,
+      sub: 0,
+      source: 'mano-obra',
+      apu: [{
+        tipo: 'L',
+        desc: recurso.desc,
+        u: recurso.u || 'un',
+        qty: 1,
+        pu: Math.round(parseFloat(recurso.pu) || 0),
+      }],
+    }));
 }
 
 function parseJornalesSheetData(data){
