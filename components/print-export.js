@@ -452,7 +452,7 @@ function parseBaseDatosSheetData(data){
   if(headerRow === -1) return [];
   const headers = data[headerRow].map(normalizeExcelKey);
   const findIndex = aliases=>headers.findIndex(h=>aliases.some(alias=>h.includes(alias)));
-  const idxCapId = findIndex(['capitulo id', 'cap id', 'capitulo codigo', 'capitulo']);
+  const idxCapId = findIndex(['capitulo id', 'cap id', 'capitulo codigo', 'capitulo nro', 'nro capitulo']);
   const idxCapName = findIndex(['capitulo']);
   const idxCod = findIndex(['codigo']);
   const idxDesc = findIndex(['descripcion']);
@@ -467,13 +467,19 @@ function parseBaseDatosSheetData(data){
     .slice(headerRow + 1)
     .filter(row=>row.some(cell=>normalizeExcelText(cell)))
     .map(row=>{
-      const capIdRaw = normalizeExcelText(row[idxCapId] || '');
-      const capId = /^\d+$/.test(capIdRaw) ? capIdRaw.padStart(2, '0') : (capIdRaw.match(/\d+/)?.[0] || '01').padStart(2, '0');
-      const capName = normalizeExcelText(row[idxCapName] || '');
+      const cod = normalizeExcelText(row[idxCod] || '');
+      const capIdRaw = idxCapId >= 0 ? normalizeExcelText(row[idxCapId] || '') : '';
+      const capNameRaw = idxCapName >= 0 ? normalizeExcelText(row[idxCapName] || '') : '';
+      const codeCapId = (cod.match(/^(\d{1,2})\./)?.[1] || '').padStart(2, '0');
+      const capIdDetected = /^\d+$/.test(capIdRaw)
+        ? capIdRaw.padStart(2, '0')
+        : (capIdRaw.match(/\d+/)?.[0] || '');
+      const capId = (capIdDetected || codeCapId || '01').padStart(2, '0');
+      const capName = capNameRaw && capNameRaw !== capIdRaw ? capNameRaw : '';
       return {
         cap: capId,
         capName,
-        cod: normalizeExcelText(row[idxCod] || ''),
+        cod,
         desc: normalizeExcelText(row[idxDesc] || ''),
         u: normalizeExcelText(row[idxUd] || 'un'),
         ramo: normalizeExcelKey(row[idxRamo] || 'civil') || 'civil',
@@ -486,92 +492,226 @@ function parseBaseDatosSheetData(data){
     .filter(row=>row.cod && row.desc);
 }
 
+function parseCapituloHeading(value){
+  const text = normalizeExcelText(value)
+    .replace(/^[\s▸•·-]+/, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const match = text.match(/^cap[^\s]?tulo\s+(\d{1,2})\s*[:.-]\s*(.+)$/i);
+  if(!match) return null;
+  return {
+    id: match[1].padStart(2, '0'),
+    name: normalizeExcelText(match[2]),
+  };
+}
+
+function isImplicitCapituloHeading(row){
+  const firstCell = normalizeExcelText(row?.[0] || '')
+    .replace(/^[\s▸•·-]+/, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if(!firstCell) return false;
+
+  const key = normalizeExcelKey(firstCell);
+  if(key.includes('apu') || key.includes('material / insumo') || key.includes('total apu')) return false;
+  if(key.includes('pagina') || key.includes('formula') || key.includes('subtotal')) return false;
+
+  const hasOtherValues = (row || [])
+    .slice(1)
+    .some(cell=>normalizeExcelText(cell));
+  if(hasOtherValues) return false;
+
+  const letters = firstCell.replace(/[^A-Za-zÁÉÍÓÚÜÑáéíóúüñ]/g, '');
+  if(letters.length < 4) return false;
+
+  return firstCell === firstCell.toUpperCase();
+}
+
+function detectApuSheetCapitulos(data){
+  const capitulos = [];
+  const seenNames = new Set();
+
+  (data || []).forEach((row, rowIndex)=>{
+    const firstCell = normalizeExcelText(row?.[0] || '');
+    let cap = parseCapituloHeading(firstCell);
+
+    if(!cap && isImplicitCapituloHeading(row)){
+      cap = {
+        id: String(capitulos.length + 1).padStart(2, '0'),
+        name: firstCell
+          .replace(/^[\s▸•·-]+/, '')
+          .replace(/\s+/g, ' ')
+          .trim(),
+      };
+    }
+
+    if(!cap || !cap.name) return;
+    const nameKey = normalizeExcelKey(cap.name);
+    if(seenNames.has(nameKey)) return;
+
+    capitulos.push({
+      id: String(cap.id || capitulos.length + 1).padStart(2, '0'),
+      name: cap.name,
+      color: getImportColorByIndex(capitulos.length),
+      ramos: ['todos', 'civil'],
+      rowIndex,
+    });
+    seenNames.add(nameKey);
+  });
+
+  return capitulos;
+}
+
+function getApuCapituloForRow(capitulos, rowIndex){
+  let current = null;
+  for(const cap of capitulos || []){
+    if(cap.rowIndex > rowIndex) break;
+    current = cap;
+  }
+  return current;
+}
+
+function isApuBlockTitle(value){
+  const text = normalizeExcelText(value);
+  if(!text) return false;
+  const key = normalizeExcelKey(text);
+  return /^apu\s*#?\s*\d+\s*:/.test(key) || /^apu\b.*\d{1,2}\.\d{1,3}\s*[-–]/i.test(text);
+}
+
+function parseApuTitle(title, capId, localIndex){
+  const text = normalizeExcelText(title);
+  const afterColon = text.includes(':')
+    ? text.split(':').slice(1).join(':').trim()
+    : text.replace(/^apu\s*#?\s*\d+/i, '').trim();
+  const explicitCode = afterColon.match(/^(\d{1,2})\.(\d{1,3})\s*[-–]\s*(.+)$/)
+    || text.match(/(\d{1,2})\.(\d{1,3})\s*[-–]\s*(.+)$/);
+  let cod = '';
+  let desc = afterColon;
+
+  if(explicitCode){
+    cod = `${explicitCode[1].padStart(2, '0')}.${explicitCode[2].padStart(2, '0')}`;
+    desc = explicitCode[3];
+  }else if(capId){
+    cod = `${capId}.${String(localIndex || 1).padStart(2, '0')}`;
+  }
+
+  return {
+    cod,
+    desc: normalizeExcelText(desc).replace(/^[-–]\s*/, ''),
+  };
+}
+
 function parseApuSheetData(data){
   const bloques = [];
+  const capitulos = detectApuSheetCapitulos(data);
+  const chapterCounters = {};
   let i = 0;
 
   while(i < data.length){
     const firstCell = normalizeExcelText(data[i]?.[0] || '');
-    if(!/^apu\b/i.test(firstCell)){
+    if(!isApuBlockTitle(firstCell)){
       i++;
       continue;
     }
 
     const title = firstCell;
-    const afterColon = title.includes(':') ? title.split(':').slice(1).join(':').trim() : title.trim();
-    const matchCode = afterColon.match(/^(\d{2}\.\d{2,3})\s*-\s*(.+)$/);
-    const code = matchCode ? matchCode[1] : '';
-    const desc = matchCode ? matchCode[2].trim() : afterColon;
+    const currentCapitulo = getApuCapituloForRow(capitulos, i);
+    const capId = currentCapitulo?.id || '';
+    if(capId) chapterCounters[capId] = (chapterCounters[capId] || 0) + 1;
+    const titleData = parseApuTitle(title, capId, capId ? chapterCounters[capId] : bloques.length + 1);
     const unit = normalizeExcelText(data[i]?.[5] || data[i]?.[6] || 'un') || 'un';
 
     let j = i + 1;
     while(j < data.length && !normalizeExcelText(data[j]?.[0] || '')) j++;
-    const header = (data[j] || []).map(normalizeExcelKey);
+    const headerRow = data[j] || [];
+    const header = headerRow.map(normalizeExcelKey);
     const hasTipoColumn = header[0]?.includes('tipo');
     const insumos = [];
     let total = 0;
+    let nextIndex = null;
 
-    j++;
-    while(j < data.length){
-      const row = data[j] || [];
-      const label = normalizeExcelText(row[0] || '');
-      const labelKey = normalizeExcelKey(label);
-      if(!row.some(cell=>normalizeExcelText(cell))){
-        j++;
-        break;
-      }
-      if(/^apu\b/i.test(label)){
-        j--;
-        break;
-      }
-      if(labelKey.includes('total apu')){
-        total = parseExcelNumber(row[4] || row[5]);
-        j++;
-        break;
-      }
-
-      const tipoBase = hasTipoColumn ? row[0] : '';
-      const descCell = hasTipoColumn ? row[1] : row[0];
-      const unitCell = hasTipoColumn ? row[2] : row[1];
-      const qtyCell = hasTipoColumn ? row[3] : row[2];
-      const puCell = hasTipoColumn ? row[4] : row[3];
-
-      const descInsumo = normalizeExcelText(descCell || '');
-      if(descInsumo){
-        insumos.push({
-          tipo: inferTipoInsumo(tipoBase, descInsumo),
-          desc: descInsumo,
-          u: normalizeExcelText(unitCell || 'un') || 'un',
-          qty: parseExcelNumber(qtyCell),
-          pu: parseExcelNumber(puCell),
-        });
-      }
+    if(header[0]?.includes('total apu')){
+      total = parseExcelNumber(headerRow[4] || headerRow[5]);
       j++;
+      nextIndex = j;
+    }else{
+      j++;
+      while(j < data.length){
+        const row = data[j] || [];
+        const label = normalizeExcelText(row[0] || '');
+        const labelKey = normalizeExcelKey(label);
+        if(!row.some(cell=>normalizeExcelText(cell))){
+          j++;
+          nextIndex = j;
+          break;
+        }
+        if(parseCapituloHeading(label) || isImplicitCapituloHeading(row)){
+          nextIndex = j;
+          break;
+        }
+        if(isApuBlockTitle(label)){
+          nextIndex = j;
+          break;
+        }
+        if(labelKey.includes('total apu')){
+          total = parseExcelNumber(row[4] || row[5]);
+          j++;
+          nextIndex = j;
+          break;
+        }
+
+        const tipoBase = hasTipoColumn ? row[0] : '';
+        const descCell = hasTipoColumn ? row[1] : row[0];
+        const unitCell = hasTipoColumn ? row[2] : row[1];
+        const qtyCell = hasTipoColumn ? row[3] : row[2];
+        const puCell = hasTipoColumn ? row[4] : row[3];
+
+        const descInsumo = normalizeExcelText(descCell || '');
+        if(descInsumo){
+          insumos.push({
+            tipo: inferTipoInsumo(tipoBase, descInsumo),
+            desc: descInsumo,
+            u: normalizeExcelText(unitCell || 'un') || 'un',
+            qty: parseExcelNumber(qtyCell),
+            pu: parseExcelNumber(puCell),
+          });
+        }
+        j++;
+      }
     }
 
-    bloques.push({ cod: code, desc, u: unit, total, insumos });
-    i = j + 1;
+    bloques.push({
+      cod: titleData.cod,
+      cap: capId,
+      capName: currentCapitulo?.name || '',
+      desc: titleData.desc,
+      u: unit,
+      total,
+      insumos,
+    });
+    i = nextIndex == null ? j : nextIndex;
   }
 
-  return bloques.filter(item=>item.desc && item.insumos.length);
+  return bloques.filter(item=>item.desc && (item.insumos.length || item.total > 0));
 }
 
 function buildImportPayloadFromWorkbook(wb){
   const capitulosSheetName = findSheetName(wb, ['capitulos', 'capitulos base']);
   const baseSheetName = findSheetName(wb, ['base de datos', 'base datos']);
   const apuSheetName = findSheetName(wb, ['costeo (apus)', 'apu detallado', 'apu']);
+  const apuSheetData = apuSheetName
+    ? XLSX.utils.sheet_to_json(wb.Sheets[apuSheetName], { header: 1, defval: '' })
+    : [];
 
   const capitulos = capitulosSheetName
     ? parseCapitulosSheetData(XLSX.utils.sheet_to_json(wb.Sheets[capitulosSheetName], { header: 1, defval: '' }))
-    : [];
+    : detectApuSheetCapitulos(apuSheetData).map(({ rowIndex, ...cap })=>cap);
 
   const basePartidas = baseSheetName
     ? parseBaseDatosSheetData(XLSX.utils.sheet_to_json(wb.Sheets[baseSheetName], { header: 1, defval: '' }))
     : [];
 
-  const apuBloques = apuSheetName
-    ? parseApuSheetData(XLSX.utils.sheet_to_json(wb.Sheets[apuSheetName], { header: 1, defval: '' }))
-    : [];
+  const apuBloques = apuSheetName ? parseApuSheetData(apuSheetData) : [];
 
   const partidasMap = new Map();
   basePartidas.forEach(item=>{
@@ -579,20 +719,29 @@ function buildImportPayloadFromWorkbook(wb){
   });
 
   apuBloques.forEach((bloque, index)=>{
-    const apuTotals = {
-      mat: Math.round(bloque.insumos.filter(i=>i.tipo === 'M').reduce((acc, i)=>acc + (i.qty * i.pu), 0)),
-      mo: Math.round(bloque.insumos.filter(i=>i.tipo === 'L').reduce((acc, i)=>acc + (i.qty * i.pu), 0)),
-      eq: Math.round(bloque.insumos.filter(i=>i.tipo === 'E').reduce((acc, i)=>acc + (i.qty * i.pu), 0)),
-      sub: Math.round(bloque.insumos.filter(i=>i.tipo === 'S').reduce((acc, i)=>acc + (i.qty * i.pu), 0)),
-    };
+    const hasApuBreakdown = Array.isArray(bloque.insumos) && bloque.insumos.length > 0;
+    const apuTotals = hasApuBreakdown
+      ? {
+        mat: Math.round(bloque.insumos.filter(i=>i.tipo === 'M').reduce((acc, i)=>acc + (i.qty * i.pu), 0)),
+        mo: Math.round(bloque.insumos.filter(i=>i.tipo === 'L').reduce((acc, i)=>acc + (i.qty * i.pu), 0)),
+        eq: Math.round(bloque.insumos.filter(i=>i.tipo === 'E').reduce((acc, i)=>acc + (i.qty * i.pu), 0)),
+        sub: Math.round(bloque.insumos.filter(i=>i.tipo === 'S').reduce((acc, i)=>acc + (i.qty * i.pu), 0)),
+      }
+      : {
+        mat: Math.round(bloque.total || 0),
+        mo: 0,
+        eq: 0,
+        sub: 0,
+      };
     const existing = bloque.cod ? partidasMap.get(bloque.cod) : null;
-    const fallbackCode = `01.${String(index + 1).padStart(2, '0')}`;
+    const fallbackCap = String(bloque.cap || '01').padStart(2, '0');
+    const fallbackCode = `${fallbackCap}.${String(index + 1).padStart(2, '0')}`;
     const cod = bloque.cod || existing?.cod || fallbackCode;
-    const cap = existing?.cap || cod.split('.')[0] || '01';
+    const cap = existing?.cap || bloque.cap || cod.split('.')[0] || '01';
 
     partidasMap.set(cod, {
-      cap,
-      capName: existing?.capName || '',
+      cap: String(cap).padStart(2, '0'),
+      capName: existing?.capName || bloque.capName || '',
       cod,
       desc: existing?.desc || bloque.desc,
       u: existing?.u || bloque.u || 'un',
@@ -615,6 +764,19 @@ function buildImportPayloadFromWorkbook(wb){
   };
 }
 
+function deriveCapIdFromCode(code){
+  const match = String(code || '').match(/^(\d{1,2})\./);
+  return match ? match[1].padStart(2, '0') : '';
+}
+
+function isMeaningfulCapName(name, capId){
+  const text = normalizeExcelText(name);
+  if(!text) return false;
+  if(normalizeExcelKey(text) === normalizeExcelKey(capId || '')) return false;
+  if(/^capitulo\s+\d+$/i.test(text)) return false;
+  return true;
+}
+
 function getImportColorByIndex(index){
   if(typeof COLORES_PRESET !== 'undefined' && Array.isArray(COLORES_PRESET) && COLORES_PRESET.length){
     return COLORES_PRESET[index % COLORES_PRESET.length];
@@ -625,7 +787,7 @@ function getImportColorByIndex(index){
 
 function buildImportedCapitulos(metaCapitulos, partidas){
   if(Array.isArray(metaCapitulos) && metaCapitulos.length){
-    return metaCapitulos.map((cap, index)=>({
+    const base = metaCapitulos.map((cap, index)=>({
       id: String(cap.id || '').padStart(2, '0'),
       name: cap.name || `Capitulo ${String(cap.id || '').padStart(2, '0')}`,
       color: cap.color || getImportColorByIndex(index),
@@ -633,34 +795,93 @@ function buildImportedCapitulos(metaCapitulos, partidas){
         ? [...new Set(['todos', ...cap.ramos])]
         : ['todos'],
     }));
+    const byId = new Map(base.map(cap=>[cap.id, cap]));
+    const byName = new Map(base.map(cap=>[normalizeExcelKey(cap.name), cap]));
+    const known = new Set(base.map(cap=>cap.id));
+    partidas.forEach(partida=>{
+      const rawCapId = String(partida.cap || deriveCapIdFromCode(partida.cod) || '01').padStart(2, '0');
+      const codeCapId = deriveCapIdFromCode(partida.cod);
+      const capNameKey = normalizeExcelKey(partida.capName || '');
+      const matchedCap = (capNameKey && byName.get(capNameKey))
+        || byId.get(rawCapId)
+        || (codeCapId && byId.get(codeCapId));
+
+      if(matchedCap){
+        partida.cap = matchedCap.id;
+        partida.capName = matchedCap.name;
+        matchedCap.ramos = [...new Set([...(matchedCap.ramos || ['todos']), partida.ramo || 'civil'])];
+        return;
+      }
+
+      const capId = rawCapId;
+      if(known.has(capId)) return;
+      const nuevo = {
+        id: capId,
+        name: isMeaningfulCapName(partida.capName, capId) ? partida.capName : `Capitulo ${capId}`,
+        color: getImportColorByIndex(base.length),
+        ramos: ['todos', partida.ramo || 'civil'],
+      };
+      base.push(nuevo);
+      byId.set(nuevo.id, nuevo);
+      byName.set(normalizeExcelKey(nuevo.name), nuevo);
+      known.add(capId);
+    });
+    return base;
   }
 
   const detectados = [];
   const seen = new Map();
+  const usedIds = new Set();
+  let nextSequentialId = 1;
+
   partidas.forEach(partida=>{
-    const capId = String(partida.cap || String(partida.cod || '').split('.')[0] || '01').padStart(2, '0');
+    const capName = normalizeExcelText(partida.capName || '');
+    const capFromCode = deriveCapIdFromCode(partida.cod);
+    const rawCapId = String(partida.cap || '').padStart(2, '0');
+    const meaningfulName = isMeaningfulCapName(capName, rawCapId);
+    const key = meaningfulName
+      ? `name:${normalizeExcelKey(capName)}`
+      : `id:${rawCapId || capFromCode || '01'}`;
     const ramo = partida.ramo || 'civil';
 
-    if(!seen.has(capId)){
+    if(!seen.has(key)){
+      let assignedId = '';
+      if(capFromCode && !usedIds.has(capFromCode)) assignedId = capFromCode;
+      else if(rawCapId && rawCapId !== '00' && rawCapId !== '01' && !usedIds.has(rawCapId)) assignedId = rawCapId;
+      else {
+        while(usedIds.has(String(nextSequentialId).padStart(2, '0'))) nextSequentialId++;
+        assignedId = String(nextSequentialId).padStart(2, '0');
+        nextSequentialId++;
+      }
+
       const nuevo = {
-        id: capId,
-        name: partida.capName || `Capitulo ${capId}`,
+        id: assignedId,
+        name: meaningfulName ? capName : `Capitulo ${assignedId}`,
         color: getImportColorByIndex(detectados.length),
         ramos: ['todos', ramo],
       };
-      seen.set(capId, nuevo);
+      seen.set(key, nuevo);
       detectados.push(nuevo);
-      return;
+      usedIds.add(assignedId);
     }
 
-    const actual = seen.get(capId);
+    const actual = seen.get(key);
     actual.ramos = [...new Set([...(actual.ramos || ['todos']), ramo])];
-    if((!actual.name || /^Capitulo\s+\d+$/i.test(actual.name)) && partida.capName){
-      actual.name = partida.capName;
+    if((!actual.name || /^Capitulo\s+\d+$/i.test(actual.name)) && meaningfulName){
+      actual.name = capName;
     }
+    partida.cap = actual.id;
+    if(!partida.capName || /^Capitulo\s+\d+$/i.test(partida.capName)) partida.capName = actual.name;
   });
 
   return detectados;
+}
+
+function normalizeImportedCapitulosAndPartidas(metaCapitulos, partidas){
+  const clonedPartidas = partidas.map(partida=>({ ...partida }));
+  const capitulos = buildImportedCapitulos(metaCapitulos, clonedPartidas);
+  const partidasOrdenadas = sortImportedPartidas(clonedPartidas, capitulos);
+  return { capitulos, partidas: partidasOrdenadas };
 }
 
 function sortImportedPartidas(partidas, capitulos){
@@ -671,6 +892,14 @@ function sortImportedPartidas(partidas, capitulos){
     if(orderA !== orderB) return orderA - orderB;
     return String(a.cod || '').localeCompare(String(b.cod || ''), 'es', { numeric: true });
   });
+}
+
+function countPartidasByCapitulo(partidas){
+  return (partidas || []).reduce((acc, partida)=>{
+    const capId = String(partida.cap || '01').padStart(2, '0');
+    acc[capId] = (acc[capId] || 0) + 1;
+    return acc;
+  }, {});
 }
 
 function limpiarDatosOperativosActuales(){
@@ -687,8 +916,9 @@ function limpiarDatosOperativosActuales(){
 }
 
 function reemplazarBaseDesdeImportacion(partidas, metaCapitulos){
-  const capitulos = buildImportedCapitulos(metaCapitulos, partidas);
-  const partidasOrdenadas = sortImportedPartidas(partidas, capitulos);
+  const normalized = normalizeImportedCapitulosAndPartidas(metaCapitulos, partidas);
+  const capitulos = normalized.capitulos;
+  const partidasOrdenadas = normalized.partidas;
 
   limpiarDatosOperativosActuales();
   CAPS = capitulos;
@@ -730,18 +960,20 @@ function leerArchivoImport(file){
       const payload = typeof sanitizeAppPayload === 'function'
         ? sanitizeAppPayload(rawPayload)
         : rawPayload;
+      const normalized = normalizeImportedCapitulosAndPartidas(payload.capitulos, payload.partidas);
       if(!payload.partidas.length){
         notif('No se encontraron partidas validas en el Excel', '#E05555');
         return;
       }
 
-      _importData = payload.partidas;
+      _importData = normalized.partidas;
       _importData.meta = {
-        capitulos: payload.capitulos,
+        capitulos: normalized.capitulos,
         apuCount: payload.apuCount,
         hasBaseSheet: payload.hasBaseSheet,
         hasApuSheet: payload.hasApuSheet,
         sourceName: file.name,
+        chapterCounts: countPartidasByCapitulo(normalized.partidas),
       };
 
       // Preview
@@ -749,13 +981,22 @@ function leerArchivoImport(file){
       const info=document.getElementById('import-info');
       const tbl=document.getElementById('import-table');
       const meta = _importData.meta;
-      info.textContent = `${_importData.length} partidas detectadas en "${file.name}"${meta.hasApuSheet ? ` | ${meta.apuCount} APUs` : ''}${meta.capitulos.length ? ` | ${meta.capitulos.length} capitulos` : ''}. Esta importacion reemplazara la base actual y ordenara las partidas por capitulo.`;
-      let th='<thead><tr><th style="padding:5px 8px;background:var(--bg2);font-size:10px;color:var(--txt3)">Codigo</th><th style="padding:5px 8px;background:var(--bg2);font-size:10px;color:var(--txt3)">Descripcion</th><th style="padding:5px 8px;background:var(--bg2);font-size:10px;color:var(--txt3)">Ud.</th><th style="padding:5px 8px;background:var(--bg2);font-size:10px;color:var(--txt3);text-align:right">P. Unit. Gs.</th><th style="padding:5px 8px;background:var(--bg2);font-size:10px;color:var(--txt3);text-align:center">APU</th></tr></thead><tbody>';
+      const capCount = Object.keys(meta.chapterCounts || {}).length;
+      const capSummary = (meta.capitulos || [])
+        .slice(0, 6)
+        .map(cap=>`${cap.id}:${meta.chapterCounts?.[cap.id] || 0}`)
+        .join(' | ');
+      info.textContent = `${_importData.length} partidas detectadas en "${file.name}"${meta.hasApuSheet ? ` | ${meta.apuCount} APUs` : ''} | ${capCount} capitulos con partidas${capSummary ? ` (${capSummary}${meta.capitulos.length > 6 ? '...' : ''})` : ''}. Esta importacion reemplazara la base actual y ordenara las partidas por capitulo.`;
+      if(_importData.length > 1 && capCount <= 1){
+        notif('Atencion: el Excel se leyo en un solo capitulo. Revisá la estructura antes de confirmar.', '#E89020');
+      }
+      let th='<thead><tr><th style="padding:5px 8px;background:var(--bg2);font-size:10px;color:var(--txt3)">Codigo</th><th style="padding:5px 8px;background:var(--bg2);font-size:10px;color:var(--txt3)">Capitulo</th><th style="padding:5px 8px;background:var(--bg2);font-size:10px;color:var(--txt3)">Descripcion</th><th style="padding:5px 8px;background:var(--bg2);font-size:10px;color:var(--txt3)">Ud.</th><th style="padding:5px 8px;background:var(--bg2);font-size:10px;color:var(--txt3);text-align:right">P. Unit. Gs.</th><th style="padding:5px 8px;background:var(--bg2);font-size:10px;color:var(--txt3);text-align:center">APU</th></tr></thead><tbody>';
       _importData.slice(0,10).forEach(r=>{
         const total = (r.mat || 0) + (r.mo || 0) + (r.eq || 0) + (r.sub || 0);
-        th+=`<tr><td style="padding:4px 8px;font-size:11px;font-family:monospace">${r.cod}</td><td style="padding:4px 8px;font-size:11px">${r.desc}</td><td style="padding:4px 8px;font-size:11px">${r.u}</td><td style="padding:4px 8px;font-size:11px;text-align:right">${fmtN(total)}</td><td style="padding:4px 8px;font-size:11px;text-align:center">${Array.isArray(r.apu) && r.apu.length ? `${r.apu.length} ins.` : '-'}</td></tr>`;
+        const capituloPreview = `${r.cap || ''}${r.capName ? ` - ${r.capName}` : ''}`;
+        th+=`<tr><td style="padding:4px 8px;font-size:11px;font-family:monospace">${r.cod}</td><td style="padding:4px 8px;font-size:11px">${capituloPreview}</td><td style="padding:4px 8px;font-size:11px">${r.desc}</td><td style="padding:4px 8px;font-size:11px">${r.u}</td><td style="padding:4px 8px;font-size:11px;text-align:right">${fmtN(total)}</td><td style="padding:4px 8px;font-size:11px;text-align:center">${Array.isArray(r.apu) && r.apu.length ? `${r.apu.length} ins.` : 'total'}</td></tr>`;
       });
-      if(_importData.length>10) th+=`<tr><td colspan="5" style="padding:6px 8px;font-size:10px;color:var(--txt3);text-align:center">... y ${_importData.length-10} mas</td></tr>`;
+      if(_importData.length>10) th+=`<tr><td colspan="6" style="padding:6px 8px;font-size:10px;color:var(--txt3);text-align:center">... y ${_importData.length-10} mas</td></tr>`;
       th+='</tbody>';
       tbl.innerHTML=th; preview.style.display='block';
       document.getElementById('btn-confirmar-import').style.display='';
@@ -766,7 +1007,7 @@ async function confirmarImport(){
   if(!_importData.length) return;
   const meta = _importData.meta || {};
   const totalPartidas = _importData.length;
-  const totalCapitulos = buildImportedCapitulos(meta.capitulos || [], _importData).length;
+  const totalCapitulos = Array.isArray(meta.capitulos) ? meta.capitulos.length : 0;
   const confirmMsg = `Se va a reemplazar la base operativa actual con "${meta.sourceName || 'el Excel seleccionado'}".\n\nEsto va a borrar:\n- Partidas actuales\n- APUs actuales\n- Presupuesto activo\n- Presupuestos guardados\n\nCapitulos detectados: ${totalCapitulos}\nPartidas detectadas: ${totalPartidas}\n\nDeseas continuar?`;
   if(!confirm(confirmMsg)) return;
 
