@@ -497,12 +497,34 @@ function parseCapituloHeading(value){
     .replace(/^[\s▸•·-]+/, '')
     .replace(/\s+/g, ' ')
     .trim();
-  const match = text.match(/^cap[ií]tulo\s+(\d{1,2})\s*[:.-]\s*(.+)$/i);
+  const match = text.match(/^cap[^\s]?tulo\s+(\d{1,2})\s*[:.-]\s*(.+)$/i);
   if(!match) return null;
   return {
     id: match[1].padStart(2, '0'),
     name: normalizeExcelText(match[2]),
   };
+}
+
+function isImplicitCapituloHeading(row){
+  const firstCell = normalizeExcelText(row?.[0] || '')
+    .replace(/^[\s▸•·-]+/, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if(!firstCell) return false;
+
+  const key = normalizeExcelKey(firstCell);
+  if(key.includes('apu') || key.includes('material / insumo') || key.includes('total apu')) return false;
+  if(key.includes('pagina') || key.includes('formula') || key.includes('subtotal')) return false;
+
+  const hasOtherValues = (row || [])
+    .slice(1)
+    .some(cell=>normalizeExcelText(cell));
+  if(hasOtherValues) return false;
+
+  const letters = firstCell.replace(/[^A-Za-zÁÉÍÓÚÜÑáéíóúüñ]/g, '');
+  if(letters.length < 4) return false;
+
+  return firstCell === firstCell.toUpperCase();
 }
 
 function isApuBlockTitle(value){
@@ -539,6 +561,7 @@ function parseApuSheetData(data){
   const bloques = [];
   const chapterCounters = {};
   let currentCapitulo = null;
+  let implicitChapterIndex = 0;
   let i = 0;
 
   while(i < data.length){
@@ -546,6 +569,16 @@ function parseApuSheetData(data){
     const capituloHeading = parseCapituloHeading(firstCell);
     if(capituloHeading){
       currentCapitulo = capituloHeading;
+      if(!chapterCounters[currentCapitulo.id]) chapterCounters[currentCapitulo.id] = 0;
+      i++;
+      continue;
+    }
+    if(isImplicitCapituloHeading(data[i])){
+      implicitChapterIndex++;
+      currentCapitulo = {
+        id: String(implicitChapterIndex).padStart(2, '0'),
+        name: normalizeExcelText(firstCell),
+      };
       if(!chapterCounters[currentCapitulo.id]) chapterCounters[currentCapitulo.id] = 0;
       i++;
       continue;
@@ -564,51 +597,61 @@ function parseApuSheetData(data){
 
     let j = i + 1;
     while(j < data.length && !normalizeExcelText(data[j]?.[0] || '')) j++;
-    const header = (data[j] || []).map(normalizeExcelKey);
+    const headerRow = data[j] || [];
+    const header = headerRow.map(normalizeExcelKey);
     const hasTipoColumn = header[0]?.includes('tipo');
     const insumos = [];
     let total = 0;
+    let nextIndex = null;
 
-    j++;
-    while(j < data.length){
-      const row = data[j] || [];
-      const label = normalizeExcelText(row[0] || '');
-      const labelKey = normalizeExcelKey(label);
-      if(!row.some(cell=>normalizeExcelText(cell))){
-        j++;
-        break;
-      }
-      if(parseCapituloHeading(label)){
-        j--;
-        break;
-      }
-      if(isApuBlockTitle(label)){
-        j--;
-        break;
-      }
-      if(labelKey.includes('total apu')){
-        total = parseExcelNumber(row[4] || row[5]);
-        j++;
-        break;
-      }
-
-      const tipoBase = hasTipoColumn ? row[0] : '';
-      const descCell = hasTipoColumn ? row[1] : row[0];
-      const unitCell = hasTipoColumn ? row[2] : row[1];
-      const qtyCell = hasTipoColumn ? row[3] : row[2];
-      const puCell = hasTipoColumn ? row[4] : row[3];
-
-      const descInsumo = normalizeExcelText(descCell || '');
-      if(descInsumo){
-        insumos.push({
-          tipo: inferTipoInsumo(tipoBase, descInsumo),
-          desc: descInsumo,
-          u: normalizeExcelText(unitCell || 'un') || 'un',
-          qty: parseExcelNumber(qtyCell),
-          pu: parseExcelNumber(puCell),
-        });
-      }
+    if(header[0]?.includes('total apu')){
+      total = parseExcelNumber(headerRow[4] || headerRow[5]);
       j++;
+      nextIndex = j;
+    }else{
+      j++;
+      while(j < data.length){
+        const row = data[j] || [];
+        const label = normalizeExcelText(row[0] || '');
+        const labelKey = normalizeExcelKey(label);
+        if(!row.some(cell=>normalizeExcelText(cell))){
+          j++;
+          nextIndex = j;
+          break;
+        }
+        if(parseCapituloHeading(label) || isImplicitCapituloHeading(row)){
+          nextIndex = j;
+          break;
+        }
+        if(isApuBlockTitle(label)){
+          nextIndex = j;
+          break;
+        }
+        if(labelKey.includes('total apu')){
+          total = parseExcelNumber(row[4] || row[5]);
+          j++;
+          nextIndex = j;
+          break;
+        }
+
+        const tipoBase = hasTipoColumn ? row[0] : '';
+        const descCell = hasTipoColumn ? row[1] : row[0];
+        const unitCell = hasTipoColumn ? row[2] : row[1];
+        const qtyCell = hasTipoColumn ? row[3] : row[2];
+        const puCell = hasTipoColumn ? row[4] : row[3];
+
+        const descInsumo = normalizeExcelText(descCell || '');
+        if(descInsumo){
+          insumos.push({
+            tipo: inferTipoInsumo(tipoBase, descInsumo),
+            desc: descInsumo,
+            u: normalizeExcelText(unitCell || 'un') || 'un',
+            qty: parseExcelNumber(qtyCell),
+            pu: parseExcelNumber(puCell),
+          });
+        }
+        j++;
+      }
     }
 
     bloques.push({
@@ -620,7 +663,7 @@ function parseApuSheetData(data){
       total,
       insumos,
     });
-    i = j + 1;
+    i = nextIndex == null ? j : nextIndex;
   }
 
   return bloques.filter(item=>item.desc && (item.insumos.length || item.total > 0));
@@ -884,12 +927,13 @@ function leerArchivoImport(file){
       const tbl=document.getElementById('import-table');
       const meta = _importData.meta;
       info.textContent = `${_importData.length} partidas detectadas en "${file.name}"${meta.hasApuSheet ? ` | ${meta.apuCount} APUs` : ''}${meta.capitulos.length ? ` | ${meta.capitulos.length} capitulos` : ''}. Esta importacion reemplazara la base actual y ordenara las partidas por capitulo.`;
-      let th='<thead><tr><th style="padding:5px 8px;background:var(--bg2);font-size:10px;color:var(--txt3)">Codigo</th><th style="padding:5px 8px;background:var(--bg2);font-size:10px;color:var(--txt3)">Descripcion</th><th style="padding:5px 8px;background:var(--bg2);font-size:10px;color:var(--txt3)">Ud.</th><th style="padding:5px 8px;background:var(--bg2);font-size:10px;color:var(--txt3);text-align:right">P. Unit. Gs.</th><th style="padding:5px 8px;background:var(--bg2);font-size:10px;color:var(--txt3);text-align:center">APU</th></tr></thead><tbody>';
+      let th='<thead><tr><th style="padding:5px 8px;background:var(--bg2);font-size:10px;color:var(--txt3)">Codigo</th><th style="padding:5px 8px;background:var(--bg2);font-size:10px;color:var(--txt3)">Capitulo</th><th style="padding:5px 8px;background:var(--bg2);font-size:10px;color:var(--txt3)">Descripcion</th><th style="padding:5px 8px;background:var(--bg2);font-size:10px;color:var(--txt3)">Ud.</th><th style="padding:5px 8px;background:var(--bg2);font-size:10px;color:var(--txt3);text-align:right">P. Unit. Gs.</th><th style="padding:5px 8px;background:var(--bg2);font-size:10px;color:var(--txt3);text-align:center">APU</th></tr></thead><tbody>';
       _importData.slice(0,10).forEach(r=>{
         const total = (r.mat || 0) + (r.mo || 0) + (r.eq || 0) + (r.sub || 0);
-        th+=`<tr><td style="padding:4px 8px;font-size:11px;font-family:monospace">${r.cod}</td><td style="padding:4px 8px;font-size:11px">${r.desc}</td><td style="padding:4px 8px;font-size:11px">${r.u}</td><td style="padding:4px 8px;font-size:11px;text-align:right">${fmtN(total)}</td><td style="padding:4px 8px;font-size:11px;text-align:center">${Array.isArray(r.apu) && r.apu.length ? `${r.apu.length} ins.` : '-'}</td></tr>`;
+        const capituloPreview = `${r.cap || ''}${r.capName ? ` - ${r.capName}` : ''}`;
+        th+=`<tr><td style="padding:4px 8px;font-size:11px;font-family:monospace">${r.cod}</td><td style="padding:4px 8px;font-size:11px">${capituloPreview}</td><td style="padding:4px 8px;font-size:11px">${r.desc}</td><td style="padding:4px 8px;font-size:11px">${r.u}</td><td style="padding:4px 8px;font-size:11px;text-align:right">${fmtN(total)}</td><td style="padding:4px 8px;font-size:11px;text-align:center">${Array.isArray(r.apu) && r.apu.length ? `${r.apu.length} ins.` : 'total'}</td></tr>`;
       });
-      if(_importData.length>10) th+=`<tr><td colspan="5" style="padding:6px 8px;font-size:10px;color:var(--txt3);text-align:center">... y ${_importData.length-10} mas</td></tr>`;
+      if(_importData.length>10) th+=`<tr><td colspan="6" style="padding:6px 8px;font-size:10px;color:var(--txt3);text-align:center">... y ${_importData.length-10} mas</td></tr>`;
       th+='</tbody>';
       tbl.innerHTML=th; preview.style.display='block';
       document.getElementById('btn-confirmar-import').style.display='';
