@@ -527,6 +527,50 @@ function isImplicitCapituloHeading(row){
   return firstCell === firstCell.toUpperCase();
 }
 
+function detectApuSheetCapitulos(data){
+  const capitulos = [];
+  const seenNames = new Set();
+
+  (data || []).forEach((row, rowIndex)=>{
+    const firstCell = normalizeExcelText(row?.[0] || '');
+    let cap = parseCapituloHeading(firstCell);
+
+    if(!cap && isImplicitCapituloHeading(row)){
+      cap = {
+        id: String(capitulos.length + 1).padStart(2, '0'),
+        name: firstCell
+          .replace(/^[\s▸•·-]+/, '')
+          .replace(/\s+/g, ' ')
+          .trim(),
+      };
+    }
+
+    if(!cap || !cap.name) return;
+    const nameKey = normalizeExcelKey(cap.name);
+    if(seenNames.has(nameKey)) return;
+
+    capitulos.push({
+      id: String(cap.id || capitulos.length + 1).padStart(2, '0'),
+      name: cap.name,
+      color: getImportColorByIndex(capitulos.length),
+      ramos: ['todos', 'civil'],
+      rowIndex,
+    });
+    seenNames.add(nameKey);
+  });
+
+  return capitulos;
+}
+
+function getApuCapituloForRow(capitulos, rowIndex){
+  let current = null;
+  for(const cap of capitulos || []){
+    if(cap.rowIndex > rowIndex) break;
+    current = cap;
+  }
+  return current;
+}
+
 function isApuBlockTitle(value){
   const text = normalizeExcelText(value);
   if(!text) return false;
@@ -559,37 +603,19 @@ function parseApuTitle(title, capId, localIndex){
 
 function parseApuSheetData(data){
   const bloques = [];
+  const capitulos = detectApuSheetCapitulos(data);
   const chapterCounters = {};
-  let currentCapitulo = null;
-  let implicitChapterIndex = 0;
   let i = 0;
 
   while(i < data.length){
     const firstCell = normalizeExcelText(data[i]?.[0] || '');
-    const capituloHeading = parseCapituloHeading(firstCell);
-    if(capituloHeading){
-      currentCapitulo = capituloHeading;
-      if(!chapterCounters[currentCapitulo.id]) chapterCounters[currentCapitulo.id] = 0;
-      i++;
-      continue;
-    }
-    if(isImplicitCapituloHeading(data[i])){
-      implicitChapterIndex++;
-      currentCapitulo = {
-        id: String(implicitChapterIndex).padStart(2, '0'),
-        name: normalizeExcelText(firstCell),
-      };
-      if(!chapterCounters[currentCapitulo.id]) chapterCounters[currentCapitulo.id] = 0;
-      i++;
-      continue;
-    }
-
     if(!isApuBlockTitle(firstCell)){
       i++;
       continue;
     }
 
     const title = firstCell;
+    const currentCapitulo = getApuCapituloForRow(capitulos, i);
     const capId = currentCapitulo?.id || '';
     if(capId) chapterCounters[capId] = (chapterCounters[capId] || 0) + 1;
     const titleData = parseApuTitle(title, capId, capId ? chapterCounters[capId] : bloques.length + 1);
@@ -673,18 +699,19 @@ function buildImportPayloadFromWorkbook(wb){
   const capitulosSheetName = findSheetName(wb, ['capitulos', 'capitulos base']);
   const baseSheetName = findSheetName(wb, ['base de datos', 'base datos']);
   const apuSheetName = findSheetName(wb, ['costeo (apus)', 'apu detallado', 'apu']);
+  const apuSheetData = apuSheetName
+    ? XLSX.utils.sheet_to_json(wb.Sheets[apuSheetName], { header: 1, defval: '' })
+    : [];
 
   const capitulos = capitulosSheetName
     ? parseCapitulosSheetData(XLSX.utils.sheet_to_json(wb.Sheets[capitulosSheetName], { header: 1, defval: '' }))
-    : [];
+    : detectApuSheetCapitulos(apuSheetData).map(({ rowIndex, ...cap })=>cap);
 
   const basePartidas = baseSheetName
     ? parseBaseDatosSheetData(XLSX.utils.sheet_to_json(wb.Sheets[baseSheetName], { header: 1, defval: '' }))
     : [];
 
-  const apuBloques = apuSheetName
-    ? parseApuSheetData(XLSX.utils.sheet_to_json(wb.Sheets[apuSheetName], { header: 1, defval: '' }))
-    : [];
+  const apuBloques = apuSheetName ? parseApuSheetData(apuSheetData) : [];
 
   const partidasMap = new Map();
   basePartidas.forEach(item=>{
@@ -768,16 +795,35 @@ function buildImportedCapitulos(metaCapitulos, partidas){
         ? [...new Set(['todos', ...cap.ramos])]
         : ['todos'],
     }));
+    const byId = new Map(base.map(cap=>[cap.id, cap]));
+    const byName = new Map(base.map(cap=>[normalizeExcelKey(cap.name), cap]));
     const known = new Set(base.map(cap=>cap.id));
     partidas.forEach(partida=>{
-      const capId = String(partida.cap || deriveCapIdFromCode(partida.cod) || '01').padStart(2, '0');
+      const rawCapId = String(partida.cap || deriveCapIdFromCode(partida.cod) || '01').padStart(2, '0');
+      const codeCapId = deriveCapIdFromCode(partida.cod);
+      const capNameKey = normalizeExcelKey(partida.capName || '');
+      const matchedCap = (capNameKey && byName.get(capNameKey))
+        || byId.get(rawCapId)
+        || (codeCapId && byId.get(codeCapId));
+
+      if(matchedCap){
+        partida.cap = matchedCap.id;
+        partida.capName = matchedCap.name;
+        matchedCap.ramos = [...new Set([...(matchedCap.ramos || ['todos']), partida.ramo || 'civil'])];
+        return;
+      }
+
+      const capId = rawCapId;
       if(known.has(capId)) return;
-      base.push({
+      const nuevo = {
         id: capId,
         name: isMeaningfulCapName(partida.capName, capId) ? partida.capName : `Capitulo ${capId}`,
         color: getImportColorByIndex(base.length),
         ramos: ['todos', partida.ramo || 'civil'],
-      });
+      };
+      base.push(nuevo);
+      byId.set(nuevo.id, nuevo);
+      byName.set(normalizeExcelKey(nuevo.name), nuevo);
       known.add(capId);
     });
     return base;
@@ -846,6 +892,14 @@ function sortImportedPartidas(partidas, capitulos){
     if(orderA !== orderB) return orderA - orderB;
     return String(a.cod || '').localeCompare(String(b.cod || ''), 'es', { numeric: true });
   });
+}
+
+function countPartidasByCapitulo(partidas){
+  return (partidas || []).reduce((acc, partida)=>{
+    const capId = String(partida.cap || '01').padStart(2, '0');
+    acc[capId] = (acc[capId] || 0) + 1;
+    return acc;
+  }, {});
 }
 
 function limpiarDatosOperativosActuales(){
@@ -919,6 +973,7 @@ function leerArchivoImport(file){
         hasBaseSheet: payload.hasBaseSheet,
         hasApuSheet: payload.hasApuSheet,
         sourceName: file.name,
+        chapterCounts: countPartidasByCapitulo(normalized.partidas),
       };
 
       // Preview
@@ -926,7 +981,15 @@ function leerArchivoImport(file){
       const info=document.getElementById('import-info');
       const tbl=document.getElementById('import-table');
       const meta = _importData.meta;
-      info.textContent = `${_importData.length} partidas detectadas en "${file.name}"${meta.hasApuSheet ? ` | ${meta.apuCount} APUs` : ''}${meta.capitulos.length ? ` | ${meta.capitulos.length} capitulos` : ''}. Esta importacion reemplazara la base actual y ordenara las partidas por capitulo.`;
+      const capCount = Object.keys(meta.chapterCounts || {}).length;
+      const capSummary = (meta.capitulos || [])
+        .slice(0, 6)
+        .map(cap=>`${cap.id}:${meta.chapterCounts?.[cap.id] || 0}`)
+        .join(' | ');
+      info.textContent = `${_importData.length} partidas detectadas en "${file.name}"${meta.hasApuSheet ? ` | ${meta.apuCount} APUs` : ''} | ${capCount} capitulos con partidas${capSummary ? ` (${capSummary}${meta.capitulos.length > 6 ? '...' : ''})` : ''}. Esta importacion reemplazara la base actual y ordenara las partidas por capitulo.`;
+      if(_importData.length > 1 && capCount <= 1){
+        notif('Atencion: el Excel se leyo en un solo capitulo. Revisá la estructura antes de confirmar.', '#E89020');
+      }
       let th='<thead><tr><th style="padding:5px 8px;background:var(--bg2);font-size:10px;color:var(--txt3)">Codigo</th><th style="padding:5px 8px;background:var(--bg2);font-size:10px;color:var(--txt3)">Capitulo</th><th style="padding:5px 8px;background:var(--bg2);font-size:10px;color:var(--txt3)">Descripcion</th><th style="padding:5px 8px;background:var(--bg2);font-size:10px;color:var(--txt3)">Ud.</th><th style="padding:5px 8px;background:var(--bg2);font-size:10px;color:var(--txt3);text-align:right">P. Unit. Gs.</th><th style="padding:5px 8px;background:var(--bg2);font-size:10px;color:var(--txt3);text-align:center">APU</th></tr></thead><tbody>';
       _importData.slice(0,10).forEach(r=>{
         const total = (r.mat || 0) + (r.mo || 0) + (r.eq || 0) + (r.sub || 0);
