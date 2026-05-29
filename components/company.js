@@ -228,7 +228,7 @@ function guardarCapitulos(){
   guardarFirebase();
   renderBD();
   renderPres();
-  renderDashboard();
+  refreshDashboard();
   notif(`Capitulos guardados: ${CAPS.length}`);
 }
 

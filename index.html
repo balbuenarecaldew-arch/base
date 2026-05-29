@@ -83,7 +83,7 @@
     <!-- Buscador global -->
     <div class="global-search-wrap">
       <span class="gs-icon">⌕</span>
-      <input type="text" id="global-search" placeholder="Buscar partidas, presupuestos..." oninput="buscarGlobal(this.value)" onfocus="mostrarResultadosGlobal()" onblur="setTimeout(()=>ocultarResultadosGlobal(),200)">
+      <input type="text" id="global-search" placeholder="Buscar partidas, presupuestos..." oninput="requestBuscarGlobal(this.value)" onfocus="mostrarResultadosGlobal()" onblur="setTimeout(()=>ocultarResultadosGlobal(),200)">
       <div id="global-results"></div>
     </div>
     <div class="topbar-spacer"></div>
@@ -186,7 +186,7 @@
       <div class="card-header">
         <h2 id="heading-recursos">Base de Recursos</h2>
         <div class="btns">
-          <input id="recursos-q" placeholder="Buscar recurso..." oninput="renderRecursos()" style="width:220px;padding:6px 11px;font-size:12px">
+          <input id="recursos-q" placeholder="Buscar recurso..." oninput="requestRenderRecursos()" style="width:220px;padding:6px 11px;font-size:12px">
           <button class="btn btn-secondary btn-sm" onclick="limpiarBusquedaRecursos()">Limpiar</button>
           <button class="btn btn-primary" onclick="abrirModalRecurso()">+ Nuevo recurso</button>
           <button class="btn btn-secondary" onclick="sincronizarCatalogosConApu(true); marcarUnsaved();">Sincronizar APUs</button>
@@ -539,7 +539,7 @@
 <div class="modal-bg" id="modal-sel">
   <div class="modal" style="max-width:800px">
     <h2>Agregar partida al presupuesto</h2>
-    <input id="sel-q" placeholder="Buscar código o descripción..." oninput="renderSel()" style="width:100%;margin-bottom:10px">
+    <input id="sel-q" placeholder="Buscar código o descripción..." oninput="requestRenderSel()" style="width:100%;margin-bottom:10px">
     <div style="max-height:420px;overflow-y:auto;border:1px solid var(--borde);border-radius:var(--radio)">
       <table style="width:100%;border-collapse:collapse;min-width:400px">
         <thead><tr>

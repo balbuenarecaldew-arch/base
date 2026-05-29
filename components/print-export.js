@@ -18,8 +18,9 @@
   const factor=(1+gi/100)*(1+bi/100)*(1+iva/100);
   const puFinal=p=>Math.round(pu(p)*factor);
   const fmtP=n=>'₲ '+Math.round(n).toLocaleString('es-PY');
+  const dbById = new Map(DB.map(p=>[p.id, p]));
   let totalGeneral=0;
-  PRESUPUESTO.forEach(it=>{const p=DB.find(x=>x.id===it.pid);if(p)totalGeneral+=puFinal(p)*it.qty});
+  PRESUPUESTO.forEach(it=>{const p=dbById.get(it.pid);if(p)totalGeneral+=puFinal(p)*it.qty});
   let html='';
 
   if(SECC_STATE['sec-portada']){
@@ -45,7 +46,7 @@
 
   if(SECC_STATE['sec-detalle']&&PRESUPUESTO.length){
     const byCap={};
-    PRESUPUESTO.forEach(it=>{const p=DB.find(x=>x.id===it.pid);if(!p)return;if(!byCap[p.cap])byCap[p.cap]=[];byCap[p.cap].push({it,p})});
+    PRESUPUESTO.forEach(it=>{const p=dbById.get(it.pid);if(!p)return;if(!byCap[p.cap])byCap[p.cap]=[];byCap[p.cap].push({it,p})});
     html+=`<h3 style="font-size:11pt;color:#1B4432;margin:14px 0 7px;border-bottom:2px solid #1B4432;padding-bottom:3px">Detalle de Partidas</h3>
     <table class="doc-table">
       <thead><tr>
@@ -86,14 +87,14 @@
     html+=`<p style="font-size:7.5pt;color:#888;margin-top:6px;font-style:italic">* Precios unitarios incluyen: gastos indirectos (${gi}%), beneficio (${bi}%) e IVA (${iva}%).</p>`;
   }
   if(SECC_STATE['sec-caps']&&PRESUPUESTO.length){
-    const byCap={}; PRESUPUESTO.forEach(it=>{const p=DB.find(x=>x.id===it.pid);if(!p)return;if(!byCap[p.cap])byCap[p.cap]=0;byCap[p.cap]+=puFinal(p)*it.qty});
+    const byCap={}; PRESUPUESTO.forEach(it=>{const p=dbById.get(it.pid);if(!p)return;if(!byCap[p.cap])byCap[p.cap]=0;byCap[p.cap]+=puFinal(p)*it.qty});
     html+=`<h3 style="font-size:11pt;color:#1B4432;margin:14px 0 7px;border-bottom:2px solid #1B4432;padding-bottom:3px">Resumen por Capitulo</h3>
     <table class="doc-table"><thead><tr><th>Cap.</th><th>Capitulo</th><th style="text-align:right">Total ₲</th><th style="text-align:right">% Obra</th></tr></thead><tbody>`;
     Object.keys(byCap).sort().forEach(cid=>{const cap=capOf(cid);const pct=totalGeneral>0?(byCap[cid]/totalGeneral*100).toFixed(1):0;html+=`<tr><td><strong>${cid}</strong></td><td>${cap.name}</td><td style="text-align:right;font-weight:700">${fmtP(byCap[cid])}</td><td style="text-align:right">${pct}%</td></tr>`;});
     html+=`<tr><td colspan="2" style="text-align:right;font-weight:700;color:#111!important;background:#fff!important;padding:8px;border-top:3px solid #1B4432">TOTAL</td><td style="text-align:right;font-weight:700;color:#1B4432!important;background:#fff!important;padding:8px;border-top:3px solid #1B4432">${fmtP(totalGeneral)}</td><td style="text-align:right;color:#111!important;background:#fff!important;padding:8px;border-top:3px solid #1B4432">100%</td></tr></tbody></table>`;
   }
   if(SECC_STATE['sec-apu']){
-    const lista=PRESUPUESTO.map(it=>DB.find(x=>x.id===it.pid)).filter(p=>p&&APU[p.cod.replace('.','_')]&&APU[p.cod.replace('.','_')].length);
+    const lista=PRESUPUESTO.map(it=>dbById.get(it.pid)).filter(p=>p&&APU[p.cod.replace('.','_')]&&APU[p.cod.replace('.','_')].length);
     if(lista.length){
       html+=`<h3 style="font-size:11pt;color:#1B4432;margin:14px 0 7px;border-bottom:2px solid #1B4432;padding-bottom:3px">Analisis de Precios Unitarios</h3>`;
       lista.forEach(p=>{
@@ -308,7 +309,8 @@ function appendPresupuestoSheet(wb){
     ['Codigo','Descripcion','Unidad','P. Unit. Base ₲','P. Unit. Final ₲','Cantidad','Total ₲','Capitulo']
   ];
   const byCap={};
-  PRESUPUESTO.forEach(it=>{const p=DB.find(x=>x.id===it.pid);if(!p)return;if(!byCap[p.cap])byCap[p.cap]=[];byCap[p.cap].push({it,p})});
+  const dbById = new Map(DB.map(p=>[p.id, p]));
+  PRESUPUESTO.forEach(it=>{const p=dbById.get(it.pid);if(!p)return;if(!byCap[p.cap])byCap[p.cap]=[];byCap[p.cap].push({it,p})});
   let total=0, totalBase=0;
   Object.keys(byCap).sort().forEach(cid=>{
     pd.push([`--- ${cid}: ${capOf(cid).name} ---`,'','','','','','','']);
@@ -1113,10 +1115,10 @@ async function confirmarImport(){
   cerrarModal('modal-importar');
   marcarUnsaved();
   renderBD();
-  if(typeof renderRecursos === 'function') renderRecursos();
-  renderDashboard();
+  refreshRecursos();
+  refreshDashboard();
   if(typeof renderPres === 'function') renderPres();
-  if(typeof renderMateriales === 'function') renderMateriales();
+  refreshMateriales();
   if(typeof renderGuardados === 'function') renderGuardados();
   if(typeof recalcResumen === 'function') recalcResumen();
   if(typeof generarPreview === 'function') generarPreview();

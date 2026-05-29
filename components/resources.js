@@ -9,6 +9,8 @@ let recursoTipoActivo = 'M';
 let editRecursoId = null;
 let _recursoIndexCache = { catalogos: null, count: -1, map: new Map() };
 let _recursosDirty = true;
+let _recursosRenderTimer = null;
+let _catalogosApuSincronizados = false;
 
 function invalidateRecursoIndex(){
   _recursoIndexCache = { catalogos: null, count: -1, map: new Map() };
@@ -90,9 +92,9 @@ function nextRecursoId(tipo){
   return `${prefix}${String(max + 1).padStart(5, '0')}`;
 }
 
-function ensureRecursoParaInsumo(insumo, usarPrecioMaestro){
+function ensureRecursoParaInsumo(insumo, usarPrecioMaestro, catalogosYaNormalizados = false){
   if(!insumo || !normalizeExcelText(insumo.desc)) return null;
-  normalizarCatalogos();
+  if(!catalogosYaNormalizados) normalizarCatalogos();
 
   const tipo = insumo.tipo || 'M';
   let recurso = getRecursoById(insumo.resourceId);
@@ -122,8 +124,9 @@ function sincronizarCatalogosConApu(renderizar = true){
   normalizarCatalogos();
   Object.values(APU || {}).forEach(insumos=>{
     if(!Array.isArray(insumos)) return;
-    insumos.forEach(insumo=>ensureRecursoParaInsumo(insumo, false));
+    insumos.forEach(insumo=>ensureRecursoParaInsumo(insumo, false, true));
   });
+  _catalogosApuSincronizados = true;
   if(renderizar) renderRecursos();
 }
 
@@ -175,6 +178,32 @@ function contarUsoRecurso(recurso){
   return count;
 }
 
+function buildRecursoUsageMap(catalogos){
+  const resourceIdsByKey = new Map();
+  Object.values(catalogos || {}).forEach(lista=>{
+    if(!Array.isArray(lista)) return;
+    lista.forEach(recurso=>{
+      if(!recurso?.id) return;
+      const key = recursoKey(recurso.tipo, recurso.desc, recurso.u);
+      if(!resourceIdsByKey.has(key)) resourceIdsByKey.set(key, []);
+      resourceIdsByKey.get(key).push(recurso.id);
+    });
+  });
+
+  const usage = new Map();
+  Object.values(APU || {}).forEach(insumos=>{
+    if(!Array.isArray(insumos)) return;
+    insumos.forEach(insumo=>{
+      const matched = new Set();
+      if(insumo?.resourceId) matched.add(insumo.resourceId);
+      const key = recursoKey(insumo?.tipo, insumo?.desc, insumo?.u);
+      (resourceIdsByKey.get(key) || []).forEach(id=>matched.add(id));
+      matched.forEach(id=>usage.set(id, (usage.get(id) || 0) + 1));
+    });
+  });
+  return usage;
+}
+
 function setRecursoTipo(tipo){
   recursoTipoActivo = tipo || 'M';
   renderRecursos();
@@ -190,6 +219,13 @@ function isRecursosActive(){
   return document.getElementById('tab-recursos')?.classList.contains('active');
 }
 
+function requestRenderRecursos(delay = 140){
+  _recursosDirty = true;
+  if(!isRecursosActive()) return;
+  clearTimeout(_recursosRenderTimer);
+  _recursosRenderTimer = setTimeout(()=>renderRecursos(true), delay);
+}
+
 function renderRecursos(force = false){
   const tbody = document.getElementById('recursos-tbody');
   if(!tbody) return;
@@ -199,8 +235,11 @@ function renderRecursos(force = false){
   }
   _recursosDirty = false;
 
-  sincronizarCatalogosConApu(false);
+  if(_catalogosApuSincronizados) normalizarCatalogos();
+  else sincronizarCatalogosConApu(false);
+
   const catalogos = catalogosShape(CATALOGOS);
+  const usageMap = buildRecursoUsageMap(catalogos);
   const q = normalizeExcelKey(document.getElementById('recursos-q')?.value || '');
   const recursos = (catalogos[recursoTipoActivo] || [])
     .filter(item=>{
@@ -237,7 +276,7 @@ function renderRecursos(force = false){
   }
 
   tbody.innerHTML = recursos.map(recurso=>{
-    const uso = contarUsoRecurso(recurso);
+    const uso = usageMap.get(recurso.id) || 0;
     const meta = RECURSO_TIPOS[recurso.tipo] || RECURSO_TIPOS.M;
     return `
       <tr>
@@ -322,8 +361,8 @@ function guardarRecurso(){
   renderRecursos();
   renderBD();
   renderPres();
-  if(typeof renderMateriales === 'function') renderMateriales();
-  renderDashboard();
+  refreshMateriales();
+  refreshDashboard();
   notif(`Recurso guardado${cambios ? ` y aplicado a ${cambios} insumos` : ''}`);
 }
 
@@ -335,8 +374,8 @@ function aplicarPrecioRecurso(id){
   renderRecursos();
   renderBD();
   renderPres();
-  if(typeof renderMateriales === 'function') renderMateriales();
-  renderDashboard();
+  refreshMateriales();
+  refreshDashboard();
   notif(cambios ? `${recurso.desc}: precio aplicado a ${cambios} insumos` : 'No hay APUs vinculados a ese recurso');
 }
 

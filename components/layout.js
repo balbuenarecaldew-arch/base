@@ -72,6 +72,31 @@ function cerrarModal(id){
 }
 function abrirModal(id){ document.getElementById(id).classList.add('open'); }
 
+function refreshMateriales(delay = 160){
+  if(typeof requestRenderMateriales === 'function') requestRenderMateriales(delay);
+  else if(typeof renderMateriales === 'function') renderMateriales();
+}
+
+function refreshDashboard(delay = 180){
+  if(typeof requestRenderDashboard === 'function') requestRenderDashboard(delay);
+  else if(typeof renderDashboard === 'function') renderDashboard();
+}
+
+function refreshRecursos(delay = 140){
+  if(typeof requestRenderRecursos === 'function') requestRenderRecursos(delay);
+  else if(typeof renderRecursos === 'function') renderRecursos();
+}
+
+let _globalSearchTimer = null;
+function requestBuscarGlobal(q, delay = 120){
+  clearTimeout(_globalSearchTimer);
+  if(!q || q.length < 2){
+    ocultarResultadosGlobal();
+    return;
+  }
+  _globalSearchTimer = setTimeout(()=>buscarGlobal(q), delay);
+}
+
 function buscarGlobal(q){
   const res = document.getElementById('global-results');
   if(!q || q.length < 2){ res.classList.remove('open'); return; }

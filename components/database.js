@@ -267,7 +267,7 @@ function renderMdoGrupoRow(grupo){
   `;
 }
 
-function renderMdoBD(lista){
+function renderMdoBD(lista, presMap = null){
   const grupos = buildMdoGrupos(lista);
   if(!grupos.length){
     document.getElementById('bd-tbody').innerHTML = `
@@ -292,7 +292,7 @@ function renderMdoBD(lista){
       html += renderPartidaSummaryRow({
         ...partida,
         _mdoMeta: meta,
-      });
+      }, presMap);
       if(expandedPartidas.has(String(partida.id))){
         html += renderDetallePartidaRow(partida, capOf(partida.cap), getPartidaApu(partida.cod));
       }
@@ -337,8 +337,10 @@ function _renderBDNow(force = false){
     }
   }
 
+  const presMap = new Map(PRESUPUESTO.map(item=>[item.pid, item]));
+
   if(bdModoActivo === 'mdo'){
-    renderMdoBD(lista);
+    renderMdoBD(lista, presMap);
     return;
   }
 
@@ -381,7 +383,7 @@ function _renderBDNow(force = false){
       return;
     }
     grupo.partidas.forEach(partida=>{
-      html += renderPartidaSummaryRow(partida);
+      html += renderPartidaSummaryRow(partida, presMap);
       if(expandedPartidas.has(String(partida.id))){
         html += renderDetallePartidaRow(partida, capOf(partida.cap), getPartidaApu(partida.cod));
       }
@@ -391,10 +393,11 @@ function _renderBDNow(force = false){
   document.getElementById('bd-tbody').innerHTML = html;
 }
 
-function renderPartidaSummaryRow(partida){
+function renderPartidaSummaryRow(partida, presMap = null){
   const apu = getPartidaApu(partida.cod);
-  const enPres = PRESUPUESTO.some(item=>item.pid === partida.id);
-  const qtyPres = enPres ? PRESUPUESTO.find(item=>item.pid === partida.id).qty : 0;
+  const presItem = presMap ? presMap.get(partida.id) : PRESUPUESTO.find(item=>item.pid === partida.id);
+  const enPres = Boolean(presItem);
+  const qtyPres = presItem ? presItem.qty : 0;
   const open = expandedPartidas.has(String(partida.id));
   const rowBg = enPres ? 'background:rgba(94,200,255,.06);border-left:2px solid var(--acento)' : '';
   const ramoBadge = partida.ramo && partida.ramo !== 'todos'
@@ -695,8 +698,8 @@ function guardarPartida(){
   marcarUnsaved();
   renderBD();
   renderPres();
-  if(typeof renderMateriales === 'function') renderMateriales();
-  renderDashboard();
+  refreshMateriales();
+  refreshDashboard();
   notif(editPid ? 'Partida actualizada' : 'Partida agregada');
 }
 
@@ -725,8 +728,8 @@ function eliminarPartida(id){
   marcarUnsaved();
   renderBD();
   renderPres();
-  if(typeof renderMateriales === 'function') renderMateriales();
-  renderDashboard();
+  refreshMateriales();
+  refreshDashboard();
   notif('Eliminada - Ctrl+Z para deshacer', '#E05555');
 }
 
@@ -836,8 +839,8 @@ function guardarInsumo(){
   marcarUnsaved();
   renderBD();
   renderPres();
-  if(typeof renderMateriales === 'function') renderMateriales();
-  renderDashboard();
+  refreshMateriales();
+  refreshDashboard();
   notif('Insumo guardado');
 }
 
@@ -849,8 +852,8 @@ function eliminarInsumo(cod, idx){
   marcarUnsaved();
   renderBD();
   renderPres();
-  if(typeof renderMateriales === 'function') renderMateriales();
-  renderDashboard();
+  refreshMateriales();
+  refreshDashboard();
   notif('Eliminado - Ctrl+Z para deshacer', '#E89020');
 }
 

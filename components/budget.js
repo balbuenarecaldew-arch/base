@@ -4,13 +4,40 @@ function abrirSelector(){
   abrirModal('modal-sel');
 }
 
+let _selectorRenderTimer = null;
+function requestRenderSel(delay = 120){
+  clearTimeout(_selectorRenderTimer);
+  _selectorRenderTimer = setTimeout(renderSel, delay);
+}
+
+function getPartidasPresupuestoMap(){
+  const ids = new Set(PRESUPUESTO.map(item=>item.pid));
+  const map = new Map();
+  if(!ids.size) return map;
+  for(const partida of DB){
+    if(ids.has(partida.id)){
+      map.set(partida.id, partida);
+      if(map.size === ids.size) break;
+    }
+  }
+  return map;
+}
+
 function renderSel(){
   const q = (document.getElementById('sel-q').value || '').toLowerCase();
   let html = '';
   let prevCap = null;
+  const presMap = new Map(PRESUPUESTO.map(item=>[item.pid, item]));
+  const maxRows = q ? 500 : 350;
+  const partidas = DB
+    .filter(p => {
+      const desc = String(p.desc || '').toLowerCase();
+      const cod = String(p.cod || '').toLowerCase();
+      return !q || desc.includes(q) || cod.includes(q);
+    });
 
-  DB
-    .filter(p => !q || p.desc.toLowerCase().includes(q) || p.cod.includes(q))
+  partidas
+    .slice(0, maxRows)
     .forEach(p => {
       const cap = capOf(p.cap);
       if(p.cap !== prevCap){
@@ -18,7 +45,7 @@ function renderSel(){
         html += `<tr><td colspan="5" style="background:${cap.color};color:#fff;padding:4px 12px;font-size:10px;font-weight:700">${p.cap} - ${cap.name}</td></tr>`;
       }
 
-      const en = PRESUPUESTO.some(x => x.pid === p.id);
+      const en = presMap.has(p.id);
       html += `
         <tr style="${en ? 'background:rgba(29,186,123,.06)' : ''}">
           <td style="padding:7px 12px"><code style="background:var(--bg2);padding:2px 6px;border-radius:4px;font-size:10px;color:var(--acento)">${p.cod}</code></td>
@@ -30,6 +57,10 @@ function renderSel(){
       `;
     });
 
+  if(partidas.length > maxRows){
+    html += `<tr><td colspan="5" style="padding:10px 12px;text-align:center;color:var(--txt3);font-size:11px;background:var(--bg2)">Mostrando ${maxRows} de ${partidas.length} partidas. Escribi mas datos para afinar la busqueda.</td></tr>`;
+  }
+
   document.getElementById('sel-tbody').innerHTML = html;
 }
 
@@ -39,13 +70,13 @@ function addToPres(pid){
   else PRESUPUESTO.push({ pid, qty: 1 });
 
   const p = DB.find(x => x.id === pid);
-  notif(`${p.cod} agregado al presupuesto`);
+  notif(p ? `${p.cod} agregado al presupuesto` : 'Partida agregada al presupuesto');
   marcarUnsaved();
   renderSel();
   renderPres();
-  if(typeof renderMateriales === 'function') renderMateriales();
+  refreshMateriales();
   renderBD();
-  renderDashboard();
+  refreshDashboard();
 }
 
 function getFactorBeneficios(){
@@ -81,7 +112,7 @@ function renderPres(force = false){
   document.getElementById('pres-factor-label').textContent = `GI ${gi}% | B ${bi}% | IVA ${iva}%`;
 
   const byCap = {};
-  const dbById = new Map(DB.map(p=>[p.id, p]));
+  const dbById = getPartidasPresupuestoMap();
   PRESUPUESTO.forEach(item => {
     const p = dbById.get(item.pid);
     if(!p) return;
@@ -147,7 +178,7 @@ function updQtyRapido(pid, val){
 
   const { factor } = getFactorBeneficios();
   let cd = 0;
-  const dbById = new Map(DB.map(p=>[p.id, p]));
+  const dbById = getPartidasPresupuestoMap();
   PRESUPUESTO.forEach(it => {
     const p = dbById.get(it.pid);
     if(!p) return;
@@ -163,8 +194,8 @@ function updQtyRapido(pid, val){
   document.getElementById('pres-cd').textContent = fmt(cd);
   document.getElementById('pres-total').textContent = fmt(Math.round(cd * factor));
   if(typeof recalcResumen === 'function') recalcResumen();
-  if(typeof renderMateriales === 'function') renderMateriales();
-  if(typeof renderDashboard === 'function') renderDashboard();
+  refreshMateriales();
+  refreshDashboard();
 }
 
 function updQty(pid, val, prevVal){
@@ -172,8 +203,8 @@ function updQty(pid, val, prevVal){
   updQtyRapido(pid, val);
   marcarUnsaved();
   renderPres();
-  if(typeof renderMateriales === 'function') renderMateriales();
-  renderDashboard();
+  refreshMateriales();
+  refreshDashboard();
 }
 
 function quitarPres(pid){
@@ -182,9 +213,9 @@ function quitarPres(pid){
   PRESUPUESTO = PRESUPUESTO.filter(x => x.pid !== pid);
   marcarUnsaved();
   renderPres();
-  if(typeof renderMateriales === 'function') renderMateriales();
+  refreshMateriales();
   renderBD();
-  renderDashboard();
+  refreshDashboard();
   notif('Partida quitada del presupuesto', '#E89020');
 }
 
@@ -194,9 +225,9 @@ function limpiarPres(){
   PRESUPUESTO = [];
   marcarUnsaved();
   renderPres();
-  if(typeof renderMateriales === 'function') renderMateriales();
+  refreshMateriales();
   renderBD();
-  renderDashboard();
+  refreshDashboard();
 }
 
 function generarNroAutoSilencioso(){
@@ -220,7 +251,7 @@ function generarNroAuto(){
 }
 
 function cdTotal(){
-  const dbById = new Map(DB.map(p=>[p.id, p]));
+  const dbById = getPartidasPresupuestoMap();
   return PRESUPUESTO.reduce((a, it) => {
     const p = dbById.get(it.pid);
     return a + (p ? pu(p) * it.qty : 0);

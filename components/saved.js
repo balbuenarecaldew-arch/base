@@ -110,10 +110,10 @@ async function guardarPresupuestoActual(){
   await guardarFirebase();
 
   renderPres();
-  if(typeof renderMateriales === 'function') renderMateriales();
+  refreshMateriales();
   renderBD();
   renderGuardados();
-  setTimeout(() => renderDashboard(), 50);
+  refreshDashboard(50);
   notif(`Presupuesto "${nuevo.nombre || 'Sin nombre'}" guardado y panel vaciado`);
 }
 
@@ -137,9 +137,9 @@ function abrirPresupuestoGuardado(idx){
 
   showTab('pres', getTabButton('pres'));
   renderPres();
-  if(typeof renderMateriales === 'function') renderMateriales();
+  refreshMateriales();
   renderGuardados();
-  renderDashboard();
+  refreshDashboard();
   notif(`Presupuesto "${pres.nombre}" cargado`);
 }
 
@@ -154,7 +154,7 @@ function duplicarPresupuesto(idx){
   PRESUPUESTOS_GUARDADOS.splice(idx + 1, 0, copia);
   marcarUnsaved();
   renderGuardados();
-  renderDashboard();
+  refreshDashboard();
   notif('Presupuesto duplicado');
 }
 
@@ -169,6 +169,6 @@ function eliminarPresupuestoGuardado(idx){
   PRESUPUESTOS_GUARDADOS.splice(idx, 1);
   marcarUnsaved();
   renderGuardados();
-  renderDashboard();
+  refreshDashboard();
   notif('Presupuesto eliminado', '#E05555');
 }

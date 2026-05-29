@@ -80,10 +80,10 @@ async function cargarDesdeFirebase(){
 
         renderBD();
         renderPres();
-        if(typeof renderMateriales === 'function') renderMateriales();
-        if(typeof renderRecursos === 'function') renderRecursos();
+        refreshMateriales();
+        refreshRecursos();
         _initialLoadDone = true;
-        setTimeout(()=>renderDashboard(), 50);
+        refreshDashboard(50);
         guardarCacheLocal();
         if(DB.length) notif('Datos sincronizados - ' + DB.length + ' partidas');
       } else {
@@ -99,9 +99,9 @@ async function cargarDesdeFirebase(){
           if(typeof sincronizarCatalogosConApu === 'function') sincronizarCatalogosConApu(false);
           renderBD();
           renderPres();
-          if(typeof renderMateriales === 'function') renderMateriales();
-          if(typeof renderRecursos === 'function') renderRecursos();
-          renderDashboard();
+          refreshMateriales();
+          refreshRecursos();
+          refreshDashboard();
           notif('Usando cache local - ' + DB.length + ' partidas', '#E89020');
         } else {
           cargarDatosIniciales();
@@ -123,9 +123,9 @@ async function cargarDesdeFirebase(){
       if(typeof sincronizarCatalogosConApu === 'function') sincronizarCatalogosConApu(false);
       renderBD();
       renderPres();
-      if(typeof renderMateriales === 'function') renderMateriales();
-      if(typeof renderRecursos === 'function') renderRecursos();
-      renderDashboard();
+      refreshMateriales();
+      refreshRecursos();
+      refreshDashboard();
       notif('Modo offline - usando datos locales', '#E89020');
     } else {
       notif('Error de conexion: ' + e.message, '#E05555');
@@ -239,10 +239,10 @@ async function resetearDatos(){
   localStorage.removeItem('presupuestapp_cache');
   renderBD();
   renderPres();
-  if(typeof renderMateriales === 'function') renderMateriales();
-  if(typeof renderRecursos === 'function') renderRecursos();
+  refreshMateriales();
+  refreshRecursos();
   renderGuardados();
-  setTimeout(()=>renderDashboard(), 50);
+  refreshDashboard(50);
   notif('Datos borrados', '#E05555');
 }
 
@@ -289,15 +289,15 @@ function deshacerUltima(){
       if(action.datos.presItems) action.datos.presItems.forEach(item=>PRESUPUESTO.push(item));
       renderBD();
       renderPres();
-      if(typeof renderMateriales === 'function') renderMateriales();
+      refreshMateriales();
       notif('Partida recuperada');
       break;
     case 'editPartida':
       DB[DB.findIndex(item=>item.id === action.datos.partida.id)] = action.datos.partida;
       renderBD();
       renderPres();
-      if(typeof renderMateriales === 'function') renderMateriales();
-      renderDashboard();
+      refreshMateriales();
+      refreshDashboard();
       notif('Edicion revertida');
       break;
     case 'elimInsumo':
@@ -307,8 +307,8 @@ function deshacerUltima(){
       renderAPU();
       renderBD();
       renderPres();
-      if(typeof renderMateriales === 'function') renderMateriales();
-      renderDashboard();
+      refreshMateriales();
+      refreshDashboard();
       notif('Insumo recuperado');
       break;
     case 'editInsumo':
@@ -318,21 +318,21 @@ function deshacerUltima(){
       renderAPU();
       renderBD();
       renderPres();
-      if(typeof renderMateriales === 'function') renderMateriales();
-      renderDashboard();
+      refreshMateriales();
+      refreshDashboard();
       notif('Insumo revertido');
       break;
     case 'limpiarPres':
       PRESUPUESTO = action.datos.items;
       renderPres();
-      if(typeof renderMateriales === 'function') renderMateriales();
+      refreshMateriales();
       renderBD();
       notif('Presupuesto restaurado');
       break;
     case 'quitarPres':
       PRESUPUESTO.push(action.datos.item);
       renderPres();
-      if(typeof renderMateriales === 'function') renderMateriales();
+      refreshMateriales();
       renderBD();
       notif('Partida devuelta');
       break;
@@ -341,7 +341,7 @@ function deshacerUltima(){
       if(item){
         item.qty = action.datos.prevQty;
         renderPres();
-        if(typeof renderMateriales === 'function') renderMateriales();
+        refreshMateriales();
         notif('Cantidad revertida');
       }
       break;

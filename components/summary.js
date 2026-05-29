@@ -19,7 +19,9 @@ function recalcResumen(){
   document.getElementById('r-iva').textContent = fmt(ivaV);
   document.getElementById('r-total').textContent = fmt(total);
 
-  const dbById = new Map(DB.map(p=>[p.id, p]));
+  const dbById = typeof getPartidasPresupuestoMap === 'function'
+    ? getPartidasPresupuestoMap()
+    : new Map(DB.map(p=>[p.id, p]));
   const byCap = {};
   let matT = 0;
   let moT = 0;
