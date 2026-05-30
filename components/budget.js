@@ -5,22 +5,105 @@ function abrirSelector(){
 }
 
 let _selectorRenderTimer = null;
+let editPresPid = null;
+
 function requestRenderSel(delay = 120){
   clearTimeout(_selectorRenderTimer);
   _selectorRenderTimer = setTimeout(renderSel, delay);
 }
 
+function presPidEquals(a, b){
+  return String(a) === String(b);
+}
+
+function presPidArg(pid){
+  return JSON.stringify(pid);
+}
+
+function findPresupuestoItem(pid){
+  return PRESUPUESTO.find(item=>presPidEquals(item.pid, pid)) || null;
+}
+
+function normalizeBudgetRubroData(data){
+  return {
+    cap: String(data.cap || '01').padStart(2, '0'),
+    cod: String(data.cod || '').trim(),
+    desc: String(data.desc || '').trim(),
+    u: String(data.u || 'un').trim() || 'un',
+    ramo: data.ramo || 'todos',
+    mat: Math.round(parseFloat(data.mat) || 0),
+    mo: Math.round(parseFloat(data.mo) || 0),
+    eq: Math.round(parseFloat(data.eq) || 0),
+    sub: Math.round(parseFloat(data.sub) || 0),
+  };
+}
+
+function getBudgetItemPartida(item, dbById = null){
+  if(!item) return null;
+  const base = item.manual ? null : (dbById || new Map(DB.map(partida=>[partida.id, partida]))).get(item.pid);
+  if(!base && !item.manual && !item.override) return null;
+
+  const data = normalizeBudgetRubroData({
+    ...(base || {}),
+    ...(item.manual ? item : (item.override || {})),
+  });
+  const baseCost = base
+    ? [base.mat, base.mo, base.eq, base.sub].map(value=>Math.round(parseFloat(value) || 0)).join('|')
+    : '';
+  const dataCost = [data.mat, data.mo, data.eq, data.sub].join('|');
+
+  return {
+    ...(base || {}),
+    ...data,
+    id: item.pid,
+    sourceId: base?.id || null,
+    sourceCod: base?.cod || data.cod,
+    _budgetOnly: Boolean(item.manual),
+    _budgetEdited: Boolean(item.override),
+    _budgetCostEdited: Boolean(item.manual || (item.override && baseCost !== dataCost)),
+  };
+}
+
 function getPartidasPresupuestoMap(){
-  const ids = new Set(PRESUPUESTO.map(item=>item.pid));
-  const map = new Map();
-  if(!ids.size) return map;
-  for(const partida of DB){
-    if(ids.has(partida.id)){
-      map.set(partida.id, partida);
-      if(map.size === ids.size) break;
+  const ids = new Set(PRESUPUESTO.filter(item=>!item.manual).map(item=>item.pid));
+  const dbById = new Map();
+  if(ids.size){
+    for(const partida of DB){
+      if(ids.has(partida.id)){
+        dbById.set(partida.id, partida);
+        if(dbById.size === ids.size) break;
+      }
     }
   }
+  const map = new Map();
+  PRESUPUESTO.forEach(item=>{
+    const partida = getBudgetItemPartida(item, dbById);
+    if(partida) map.set(item.pid, partida);
+  });
   return map;
+}
+
+function getPresupuestoResolvedItems(items = PRESUPUESTO){
+  const ids = new Set((items || []).filter(item=>!item.manual).map(item=>item.pid));
+  const dbById = new Map();
+  if(ids.size){
+    DB.forEach(partida=>{
+      if(ids.has(partida.id)) dbById.set(partida.id, partida);
+    });
+  }
+  return (items || [])
+    .map(item=>({ item, p: getBudgetItemPartida(item, dbById) }))
+    .filter(entry=>entry.p);
+}
+
+function nextManualBudgetCode(capId){
+  const cap = String(capId || '01').padStart(2, '0');
+  const used = new Set(getPresupuestoResolvedItems().map(({p})=>String(p.cod || '').toLowerCase()));
+  for(let i = 1; i <= 999; i++){
+    const code = `${cap}.M${String(i).padStart(2, '0')}`;
+    if(!used.has(code.toLowerCase())) return code;
+  }
+  return `${cap}.M${Date.now().toString().slice(-4)}`;
 }
 
 function renderSel(){
@@ -65,7 +148,7 @@ function renderSel(){
 }
 
 function addToPres(pid){
-  const ex = PRESUPUESTO.find(x => x.pid === pid);
+  const ex = findPresupuestoItem(pid);
   if(ex) ex.qty += 1;
   else PRESUPUESTO.push({ pid, qty: 1 });
 
@@ -77,6 +160,120 @@ function addToPres(pid){
   refreshMateriales();
   renderBD();
   refreshDashboard();
+}
+
+function fillPresupuestoCapSelect(selected = '01'){
+  const select = document.getElementById('pr-cap');
+  if(!select) return;
+  select.innerHTML = CAPS.map(cap=>`<option value="${cap.id}">${cap.id} - ${cap.name}</option>`).join('');
+  select.value = selected || CAPS[0]?.id || '01';
+}
+
+function updatePresupuestoManualTotal(){
+  const total = ['pr-mat', 'pr-mo', 'pr-eq', 'pr-sub']
+    .reduce((acc, id)=>acc + (parseFloat(document.getElementById(id)?.value) || 0), 0);
+  const el = document.getElementById('pr-pu-show');
+  if(el) el.textContent = `Gs. ${fmtN(total)}`;
+}
+
+function autoCodPresupuesto(){
+  if(editPresPid) return;
+  const cap = document.getElementById('pr-cap')?.value || '01';
+  const cod = document.getElementById('pr-cod');
+  if(cod) cod.value = nextManualBudgetCode(cap);
+}
+
+function abrirModalRubroPresupuesto(pid = null){
+  editPresPid = pid;
+  const item = pid != null ? findPresupuestoItem(pid) : null;
+  const partida = item ? getBudgetItemPartida(item) : null;
+  const cap = partida?.cap || (CAPS[0]?.id || '01');
+  fillPresupuestoCapSelect(cap);
+
+  document.getElementById('pr-title').textContent = item ? 'Editar rubro del presupuesto' : 'Nuevo rubro manual';
+  document.getElementById('pr-cap').value = cap;
+  document.getElementById('pr-cod').value = partida?.cod || nextManualBudgetCode(cap);
+  document.getElementById('pr-desc').value = partida?.desc || '';
+  document.getElementById('pr-u').value = partida?.u || 'un';
+  document.getElementById('pr-qty').value = item?.qty || 1;
+  document.getElementById('pr-mat').value = partida?.mat || 0;
+  document.getElementById('pr-mo').value = partida?.mo || 0;
+  document.getElementById('pr-eq').value = partida?.eq || 0;
+  document.getElementById('pr-sub').value = partida?.sub || 0;
+
+  const restoreBtn = document.getElementById('pr-restaurar');
+  if(restoreBtn) restoreBtn.style.display = item && item.override ? 'inline-flex' : 'none';
+
+  updatePresupuestoManualTotal();
+  abrirModal('modal-rubro-presupuesto');
+}
+
+function guardarRubroPresupuesto(){
+  const desc = document.getElementById('pr-desc').value.trim();
+  const cod = document.getElementById('pr-cod').value.trim();
+  const qty = Math.max(0.01, parseFloat(document.getElementById('pr-qty').value) || 1);
+  if(!cod || !desc){
+    notif('Completa codigo y descripcion del rubro', '#E05555');
+    return;
+  }
+
+  const data = normalizeBudgetRubroData({
+    cap: document.getElementById('pr-cap').value,
+    cod,
+    desc,
+    u: document.getElementById('pr-u').value,
+    ramo: 'todos',
+    mat: document.getElementById('pr-mat').value,
+    mo: document.getElementById('pr-mo').value,
+    eq: document.getElementById('pr-eq').value,
+    sub: document.getElementById('pr-sub').value,
+  });
+
+  if(editPresPid != null){
+    const item = findPresupuestoItem(editPresPid);
+    if(!item) return;
+    pushHistorial('editPresItem', { pid: item.pid, prevItem: JSON.parse(JSON.stringify(item)) });
+    item.qty = qty;
+    if(item.manual){
+      Object.assign(item, data, { manual: true });
+    }else{
+      item.override = data;
+    }
+  }else{
+    const item = {
+      pid: `manual-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      qty,
+      manual: true,
+      ...data,
+    };
+    PRESUPUESTO.push(item);
+    pushHistorial('addPresManual', { pid: item.pid });
+  }
+
+  editPresPid = null;
+  cerrarModal('modal-rubro-presupuesto');
+  marcarUnsaved();
+  renderPres();
+  refreshMateriales();
+  renderBD();
+  refreshDashboard();
+  notif('Rubro del presupuesto guardado');
+}
+
+function restaurarRubroPresupuesto(){
+  if(editPresPid == null) return;
+  const item = findPresupuestoItem(editPresPid);
+  if(!item || !item.override) return;
+  pushHistorial('editPresItem', { pid: item.pid, prevItem: JSON.parse(JSON.stringify(item)) });
+  delete item.override;
+  cerrarModal('modal-rubro-presupuesto');
+  editPresPid = null;
+  marcarUnsaved();
+  renderPres();
+  refreshMateriales();
+  renderBD();
+  refreshDashboard();
+  notif('Rubro restaurado desde la base');
 }
 
 function getFactorBeneficios(){
@@ -143,7 +340,11 @@ function renderPres(force = false){
       html += `
         <tr>
           <td><code style="background:var(--bg3);padding:2px 7px;border-radius:5px;font-size:10px;color:var(--acento)">${p.cod}</code></td>
-          <td style="font-size:13px">${p.desc}</td>
+          <td style="font-size:13px">
+            <div>${p.desc}</div>
+            ${p._budgetOnly ? '<div class="cell-meta"><span class="chip chip-success">Manual</span></div>' : ''}
+            ${p._budgetEdited ? '<div class="cell-meta"><span class="chip chip-outline">Editado en presupuesto</span></div>' : ''}
+          </td>
           <td style="color:var(--txt3);font-size:11px">${p.u}</td>
           <td class="num" style="font-size:12px;color:var(--txt2);font-family:'IBM Plex Mono',monospace">${fmtN(pu(p))}</td>
           <td class="num">
@@ -153,13 +354,18 @@ function renderPres(force = false){
               step="0.01"
               value="${item.qty}"
               style="width:90px;padding:5px 8px;text-align:right;border:1px solid var(--borde2);border-radius:7px;font-size:12px;background:var(--bg2);color:var(--txt)"
-              onchange="updQty(${item.pid},this.value,'${item.qty}')"
-              oninput="updQtyRapido(${item.pid},this.value)"
+              onchange="updQty(${presPidArg(item.pid)},this.value,'${item.qty}')"
+              oninput="updQtyRapido(${presPidArg(item.pid)},this.value)"
             >
           </td>
           <td id="pres-item-total-${item.pid}" class="num" style="font-weight:700;font-size:14px;color:var(--acento);font-family:'IBM Plex Mono',monospace">Gs. ${fmtN(t)}</td>
           <td id="pres-item-final-${item.pid}" class="num" style="font-weight:700;font-size:13px;color:var(--amarillo);font-family:'IBM Plex Mono',monospace">Gs. ${fmtN(tFin)}</td>
-          <td><button class="btn btn-danger btn-xs" onclick="quitarPres(${item.pid})">Quitar</button></td>
+          <td>
+            <div style="display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end">
+              <button class="btn btn-secondary btn-xs" onclick="abrirModalRubroPresupuesto(${presPidArg(item.pid)})">Editar</button>
+              <button class="btn btn-danger btn-xs" onclick="quitarPres(${presPidArg(item.pid)})">Quitar</button>
+            </div>
+          </td>
         </tr>
       `;
     });
@@ -173,7 +379,7 @@ function renderPres(force = false){
 }
 
 function updQtyRapido(pid, val){
-  const item = PRESUPUESTO.find(x => x.pid === pid);
+  const item = findPresupuestoItem(pid);
   if(item) item.qty = Math.max(0.01, parseFloat(val) || 0.01);
 
   const { factor } = getFactorBeneficios();
@@ -208,9 +414,9 @@ function updQty(pid, val, prevVal){
 }
 
 function quitarPres(pid){
-  const item = PRESUPUESTO.find(x => x.pid === pid);
+  const item = findPresupuestoItem(pid);
   if(item) pushHistorial('quitarPres', { item: { ...item } });
-  PRESUPUESTO = PRESUPUESTO.filter(x => x.pid !== pid);
+  PRESUPUESTO = PRESUPUESTO.filter(x => !presPidEquals(x.pid, pid));
   marcarUnsaved();
   renderPres();
   refreshMateriales();

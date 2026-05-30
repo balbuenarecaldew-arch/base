@@ -272,6 +272,8 @@ function actualizarBtnUndo(){
     limpiarPres: 'Vaciar presupuesto',
     quitarPres: 'Quitar partida',
     updQty: 'Cambio de cantidad',
+    addPresManual: 'Agregar rubro manual',
+    editPresItem: 'Editar rubro del presupuesto',
   };
 
   btn.classList.add('active');
@@ -337,12 +339,34 @@ function deshacerUltima(){
       notif('Partida devuelta');
       break;
     case 'updQty': {
-      const item = PRESUPUESTO.find(entry=>entry.pid === action.datos.pid);
+      const item = typeof findPresupuestoItem === 'function'
+        ? findPresupuestoItem(action.datos.pid)
+        : PRESUPUESTO.find(entry=>entry.pid === action.datos.pid);
       if(item){
         item.qty = action.datos.prevQty;
         renderPres();
         refreshMateriales();
         notif('Cantidad revertida');
+      }
+      break;
+    }
+    case 'addPresManual':
+      PRESUPUESTO = PRESUPUESTO.filter(item=>String(item.pid) !== String(action.datos.pid));
+      renderPres();
+      refreshMateriales();
+      renderBD();
+      refreshDashboard();
+      notif('Rubro manual eliminado');
+      break;
+    case 'editPresItem': {
+      const idx = PRESUPUESTO.findIndex(item=>String(item.pid) === String(action.datos.pid));
+      if(idx >= 0){
+        PRESUPUESTO[idx] = action.datos.prevItem;
+        renderPres();
+        refreshMateriales();
+        renderBD();
+        refreshDashboard();
+        notif('Rubro del presupuesto restaurado');
       }
       break;
     }

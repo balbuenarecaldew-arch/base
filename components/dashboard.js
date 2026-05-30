@@ -215,7 +215,9 @@ function renderDashboard(force = false){
 
   recientes.forEach((p, idx) => {
     const totalPres = p.items.reduce((a, it) => {
-      const db = dbById.get(it.pid);
+      const db = typeof getBudgetItemPartida === 'function'
+        ? getBudgetItemPartida(it, dbById)
+        : dbById.get(it.pid);
       return a + (db ? pu(db) * it.qty : 0);
     }, 0);
     html += `

@@ -81,16 +81,25 @@ function buildMaterialesPresupuesto(){
   const capitulosMap = new Map();
   const sinApu = [];
   const partidasConMateriales = new Set();
-  const dbById = new Map((DB || []).map(partida=>[partida.id, partida]));
   const recursosById = getMaterialesRecursoMap();
 
-  (PRESUPUESTO || []).forEach(item=>{
-    const partida = dbById.get(item.pid);
+  const items = typeof getPresupuestoResolvedItems === 'function'
+    ? getPresupuestoResolvedItems()
+    : (PRESUPUESTO || []).map(item=>({
+        item,
+        p: new Map((DB || []).map(partida=>[partida.id, partida])).get(item.pid),
+      })).filter(entry=>entry.p);
+
+  items.forEach(({ item, p: partida })=>{
     if(!partida) return;
 
     const cap = capOf(partida.cap);
     const qtyRubro = Math.max(0, parseFloat(item.qty) || 0);
-    const apu = typeof getPartidaApu === 'function' ? getPartidaApu(partida.cod) : (APU[partidaKeyFromCode(partida.cod)] || []);
+    const puedeUsarApuBase = !partida._budgetOnly && !partida._budgetCostEdited;
+    const apuCod = partida.sourceCod || partida.cod;
+    const apu = puedeUsarApuBase
+      ? (typeof getPartidaApu === 'function' ? getPartidaApu(apuCod) : (APU[partidaKeyFromCode(apuCod)] || []))
+      : [];
     const materiales = (apu || []).filter(insumo=>insumo && insumo.tipo === 'M');
     const capAcc = getMaterialCapAcc(capitulosMap, partida.cap, cap);
 

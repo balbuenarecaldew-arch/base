@@ -29,7 +29,9 @@ function renderGuardados(){
   lista.forEach(pres => {
     const realIdx = PRESUPUESTOS_GUARDADOS.indexOf(pres);
     const total = pres.items.reduce((a, it) => {
-      const p = dbById.get(it.pid);
+      const p = typeof getBudgetItemPartida === 'function'
+        ? getBudgetItemPartida(it, dbById)
+        : dbById.get(it.pid);
       return a + (p ? pu(p) * it.qty : 0);
     }, 0);
     const esActivo = pres.id === presupuestoActivoGuardadoId;
@@ -122,6 +124,7 @@ function abrirPresupuestoGuardado(idx){
   if(!confirm(`Abrir "${pres.nombre}"?\n\nEsto reemplazara el presupuesto activo actual.`)) return;
 
   PRESUPUESTO = JSON.parse(JSON.stringify(pres.items));
+  if(typeof sanitizePresupuestoList === 'function') PRESUPUESTO = sanitizePresupuestoList(PRESUPUESTO);
   presupuestoActivoGuardadoId = pres.id;
 
   if(pres.config){

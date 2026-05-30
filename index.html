@@ -219,7 +219,8 @@
         <h2>Presupuesto Activo</h2>
         <div class="btns">
           <button class="btn btn-primary" onclick="abrirSelector()">+ Agregar partida</button>
-          <button class="btn btn-export" onclick="exportarPresupuestoFinalExcel()">Excel presupuesto final</button>
+          <button class="btn btn-secondary" onclick="abrirModalRubroPresupuesto()">+ Rubro manual</button>
+          <button class="btn btn-export" onclick="exportarPresupuestoFinalExcel()">Excel profesional</button>
           <button class="btn btn-secondary" onclick="guardarPresupuestoActual()" style="background:var(--acento3);color:var(--acento);border-color:var(--acento2)">Guardar en archivo</button>
           <button class="btn btn-danger" onclick="limpiarPres()">Vaciar</button>
         </div>
@@ -240,9 +241,9 @@
             <th>Código</th><th>Descripción</th><th>Ud.</th>
             <th class="num" style="color:var(--acento)">P. Unitario ₲</th>
             <th class="num" style="width:130px">Cantidad</th>
-            <th class="num" style="color:var(--acento)">Total ₲</th>
-            <th class="num" style="color:var(--amarillo);white-space:nowrap">c/ GI+B+IVA ₲</th>
-            <th style="width:50px"></th>
+          <th class="num" style="color:var(--acento)">Total ₲</th>
+          <th class="num" style="color:var(--amarillo);white-space:nowrap">c/ GI+B+IVA ₲</th>
+            <th style="width:150px">Acciones</th>
           </tr></thead>
           <tbody id="pres-tbody"></tbody>
         </table>
@@ -351,7 +352,7 @@
         <div class="card">
           <div class="card-header"><h2>Exportar</h2></div>
           <div class="card-body" style="display:flex;flex-direction:column;gap:8px">
-            <button class="btn btn-export" style="justify-content:center;width:100%" onclick="exportarPresupuestoFinalExcel()">Exportar presupuesto final</button>
+            <button class="btn btn-export" style="justify-content:center;width:100%" onclick="exportarPresupuestoFinalExcel()">Exportar Excel profesional</button>
             <button class="btn btn-secondary admin-only" style="justify-content:center;width:100%" onclick="exportarExcel()">Exportar Excel completo</button>
             <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--borde)" class="admin-only">
               <p style="font-size:10px;color:var(--txt3);margin-bottom:7px">Zona de peligro</p>
@@ -531,6 +532,38 @@
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="cerrarModal('modal-recurso')">Cancelar</button>
       <button class="btn btn-primary" onclick="guardarRecurso()">Guardar y aplicar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Rubro de Presupuesto -->
+<div class="modal-bg" id="modal-rubro-presupuesto">
+  <div class="modal">
+    <h2 id="pr-title">Nuevo rubro manual</h2>
+    <p style="font-size:12px;color:var(--txt3);margin-bottom:12px">Este rubro se guarda solo dentro del presupuesto activo y no modifica la base de datos.</p>
+    <div class="form-grid">
+      <div class="form-group"><label>Capítulo</label><select id="pr-cap" onchange="autoCodPresupuesto()"></select></div>
+      <div class="form-group"><label>Código</label><input id="pr-cod" class="cod" placeholder="ej: 02.M01"></div>
+      <div class="form-group"><label>Unidad</label>
+        <select id="pr-u"><option>m²</option><option>m³</option><option>ml</option><option>kg</option><option>un</option><option>gl</option><option>hr</option><option>jor</option><option>bo</option><option>l</option><option>pq</option><option>pulg</option><option>día</option></select>
+      </div>
+      <div class="form-group"><label>Cantidad</label><input id="pr-qty" type="number" min="0.01" step="0.01" value="1"></div>
+    </div>
+    <div class="form-group" style="margin-bottom:12px"><label>Descripción</label><textarea id="pr-desc" rows="2" style="resize:vertical"></textarea></div>
+    <div class="form-grid">
+      <div class="form-group"><label>Materiales (₲)</label><input id="pr-mat" type="number" min="0" value="0" oninput="updatePresupuestoManualTotal()"></div>
+      <div class="form-group"><label>Mano de Obra (₲)</label><input id="pr-mo" type="number" min="0" value="0" oninput="updatePresupuestoManualTotal()"></div>
+      <div class="form-group"><label>Equipo (₲)</label><input id="pr-eq" type="number" min="0" value="0" oninput="updatePresupuestoManualTotal()"></div>
+      <div class="form-group"><label>Subcontrato (₲)</label><input id="pr-sub" type="number" min="0" value="0" oninput="updatePresupuestoManualTotal()"></div>
+    </div>
+    <div style="background:var(--bg3);border-radius:var(--radio);padding:10px;display:flex;justify-content:space-between;align-items:center">
+      <span style="font-size:12px;color:var(--txt3)">Precio Unitario Total:</span>
+      <span id="pr-pu-show" style="font-size:18px;font-weight:700;color:var(--acento);font-family:'IBM Plex Mono',monospace">Gs. 0</span>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-warning" id="pr-restaurar" onclick="restaurarRubroPresupuesto()" style="display:none">Restaurar base</button>
+      <button class="btn btn-secondary" onclick="cerrarModal('modal-rubro-presupuesto')">Cancelar</button>
+      <button class="btn btn-primary" onclick="guardarRubroPresupuesto()">Guardar rubro</button>
     </div>
   </div>
 </div>

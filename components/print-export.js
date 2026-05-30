@@ -18,9 +18,11 @@
   const factor=(1+gi/100)*(1+bi/100)*(1+iva/100);
   const puFinal=p=>Math.round(pu(p)*factor);
   const fmtP=n=>'₲ '+Math.round(n).toLocaleString('es-PY');
-  const dbById = new Map(DB.map(p=>[p.id, p]));
+  const presItems = typeof getPresupuestoResolvedItems === 'function'
+    ? getPresupuestoResolvedItems()
+    : PRESUPUESTO.map(it=>({ item: it, p: new Map(DB.map(p=>[p.id, p])).get(it.pid) })).filter(entry=>entry.p);
   let totalGeneral=0;
-  PRESUPUESTO.forEach(it=>{const p=dbById.get(it.pid);if(p)totalGeneral+=puFinal(p)*it.qty});
+  presItems.forEach(({item:it,p})=>{if(p)totalGeneral+=puFinal(p)*it.qty});
   let html='';
 
   if(SECC_STATE['sec-portada']){
@@ -46,7 +48,7 @@
 
   if(SECC_STATE['sec-detalle']&&PRESUPUESTO.length){
     const byCap={};
-    PRESUPUESTO.forEach(it=>{const p=dbById.get(it.pid);if(!p)return;if(!byCap[p.cap])byCap[p.cap]=[];byCap[p.cap].push({it,p})});
+    presItems.forEach(({item:it,p})=>{if(!p)return;if(!byCap[p.cap])byCap[p.cap]=[];byCap[p.cap].push({it,p})});
     html+=`<h3 style="font-size:11pt;color:#1B4432;margin:14px 0 7px;border-bottom:2px solid #1B4432;padding-bottom:3px">Detalle de Partidas</h3>
     <table class="doc-table">
       <thead><tr>
@@ -87,18 +89,20 @@
     html+=`<p style="font-size:7.5pt;color:#888;margin-top:6px;font-style:italic">* Precios unitarios incluyen: gastos indirectos (${gi}%), beneficio (${bi}%) e IVA (${iva}%).</p>`;
   }
   if(SECC_STATE['sec-caps']&&PRESUPUESTO.length){
-    const byCap={}; PRESUPUESTO.forEach(it=>{const p=dbById.get(it.pid);if(!p)return;if(!byCap[p.cap])byCap[p.cap]=0;byCap[p.cap]+=puFinal(p)*it.qty});
+    const byCap={}; presItems.forEach(({item:it,p})=>{if(!p)return;if(!byCap[p.cap])byCap[p.cap]=0;byCap[p.cap]+=puFinal(p)*it.qty});
     html+=`<h3 style="font-size:11pt;color:#1B4432;margin:14px 0 7px;border-bottom:2px solid #1B4432;padding-bottom:3px">Resumen por Capitulo</h3>
     <table class="doc-table"><thead><tr><th>Cap.</th><th>Capitulo</th><th style="text-align:right">Total ₲</th><th style="text-align:right">% Obra</th></tr></thead><tbody>`;
     Object.keys(byCap).sort().forEach(cid=>{const cap=capOf(cid);const pct=totalGeneral>0?(byCap[cid]/totalGeneral*100).toFixed(1):0;html+=`<tr><td><strong>${cid}</strong></td><td>${cap.name}</td><td style="text-align:right;font-weight:700">${fmtP(byCap[cid])}</td><td style="text-align:right">${pct}%</td></tr>`;});
     html+=`<tr><td colspan="2" style="text-align:right;font-weight:700;color:#111!important;background:#fff!important;padding:8px;border-top:3px solid #1B4432">TOTAL</td><td style="text-align:right;font-weight:700;color:#1B4432!important;background:#fff!important;padding:8px;border-top:3px solid #1B4432">${fmtP(totalGeneral)}</td><td style="text-align:right;color:#111!important;background:#fff!important;padding:8px;border-top:3px solid #1B4432">100%</td></tr></tbody></table>`;
   }
   if(SECC_STATE['sec-apu']){
-    const lista=PRESUPUESTO.map(it=>dbById.get(it.pid)).filter(p=>p&&APU[p.cod.replace('.','_')]&&APU[p.cod.replace('.','_')].length);
+    const lista=presItems
+      .map(({p})=>p)
+      .filter(p=>p && !p._budgetOnly && !p._budgetCostEdited && APU[(p.sourceCod || p.cod).replace('.','_')] && APU[(p.sourceCod || p.cod).replace('.','_')].length);
     if(lista.length){
       html+=`<h3 style="font-size:11pt;color:#1B4432;margin:14px 0 7px;border-bottom:2px solid #1B4432;padding-bottom:3px">Analisis de Precios Unitarios</h3>`;
       lista.forEach(p=>{
-        const ins=APU[p.cod.replace('.','_')];
+        const ins=APU[(p.sourceCod || p.cod).replace('.','_')];
         const matT=ins.filter(i=>i.tipo==='M').reduce((a,i)=>a+i.qty*i.pu,0);
         const moT =ins.filter(i=>i.tipo==='L').reduce((a,i)=>a+i.qty*i.pu,0);
         const eqT =ins.filter(i=>i.tipo==='E').reduce((a,i)=>a+i.qty*i.pu,0);
@@ -173,13 +177,18 @@ function imprimirDocumento(){
   setTimeout(()=>document.getElementById('print-output').innerHTML='', 500);
 }
 
-function getBudgetExportContext(){
-  const wb = XLSX.utils.book_new();
+function getBudgetFactors(){
   const gi=parseFloat(document.getElementById('pct-gi').value)||0;
   const bi=parseFloat(document.getElementById('pct-bi').value)||0;
   const iva=parseFloat(document.getElementById('pct-iva').value)||0;
   const factor=(1+gi/100)*(1+bi/100)*(1+iva/100);
   const puFinal=p=>Math.round(pu(p)*factor);
+  return { gi, bi, iva, factor, puFinal };
+}
+
+function getBudgetExportContext(){
+  const wb = XLSX.utils.book_new();
+  const { gi, bi, iva, factor, puFinal } = getBudgetFactors();
   return { wb, gi, bi, iva, factor, puFinal };
 }
 
@@ -293,37 +302,248 @@ function appendBaseDatosSheet(wb){
   XLSX.utils.book_append_sheet(wb, ws, 'Base de Datos');
 }
 
-function appendPresupuestoSheet(wb){
-  const { gi, bi, iva, puFinal } = getBudgetExportContext();
-  const pd = [
-    ['PRESUPUESTO DE OBRA'],
-    ['Proyecto:', document.getElementById('p-nombre').value],
-    ['Cliente:', document.getElementById('p-cliente').value],
-    ['Ubicacion:', document.getElementById('p-ubic').value],
-    ['Responsable:', document.getElementById('p-resp').value],
-    ['Nro. Presupuesto:', document.getElementById('p-nro').value],
-    ['Fecha:', document.getElementById('p-fecha').value],
-    [''],
-    ['GI %:', gi, 'Beneficio %:', bi, 'IVA %:', iva],
-    [''],
-    ['Codigo','Descripcion','Unidad','P. Unit. Base ₲','P. Unit. Final ₲','Cantidad','Total ₲','Capitulo']
-  ];
-  const byCap={};
-  const dbById = new Map(DB.map(p=>[p.id, p]));
-  PRESUPUESTO.forEach(it=>{const p=dbById.get(it.pid);if(!p)return;if(!byCap[p.cap])byCap[p.cap]=[];byCap[p.cap].push({it,p})});
-  let total=0, totalBase=0;
-  Object.keys(byCap).sort().forEach(cid=>{
-    pd.push([`--- ${cid}: ${capOf(cid).name} ---`,'','','','','','','']);
-    byCap[cid].forEach(({it,p})=>{
-      const puf=puFinal(p); const t=puf*it.qty; total+=t;
-      const pb=pu(p); totalBase+=pb*it.qty;
-      pd.push([p.cod, p.desc, p.u, pb, puf, it.qty, t, capOf(p.cap).name]);
-    });
+function getProjectExportMeta(){
+  return {
+    proyecto: document.getElementById('p-nombre')?.value || '',
+    cliente: document.getElementById('p-cliente')?.value || '',
+    ubicacion: document.getElementById('p-ubic')?.value || '',
+    responsable: document.getElementById('p-resp')?.value || '',
+    nro: document.getElementById('p-nro')?.value || '',
+    fecha: document.getElementById('p-fecha')?.value || '',
+    empresa: document.getElementById('emp-nombre')?.value || '',
+    ruc: document.getElementById('emp-ruc')?.value || '',
+  };
+}
+
+function buildBudgetExportData(){
+  const { gi, bi, iva, factor, puFinal } = getBudgetFactors();
+  const meta = getProjectExportMeta();
+  const items = typeof getPresupuestoResolvedItems === 'function'
+    ? getPresupuestoResolvedItems()
+    : PRESUPUESTO.map(item=>({ item, p: new Map(DB.map(p=>[p.id, p])).get(item.pid) })).filter(entry=>entry.p);
+
+  const detalle = items.map(({ item, p }, index)=>{
+    const costoDirecto = pu(p);
+    const unitFinal = puFinal(p);
+    const qty = parseFloat(item.qty) || 0;
+    const cap = capOf(p.cap);
+    return {
+      item: index + 1,
+      cod: p.cod,
+      desc: p.desc,
+      u: p.u,
+      qty,
+      mat: p.mat || 0,
+      mo: p.mo || 0,
+      eq: p.eq || 0,
+      sub: p.sub || 0,
+      costoDirecto,
+      unitFinal,
+      totalDirecto: Math.round(costoDirecto * qty),
+      totalFinal: Math.round(unitFinal * qty),
+      capId: p.cap,
+      capName: cap.name,
+      origen: p._budgetOnly ? 'Manual' : (p._budgetEdited ? 'Editado en presupuesto' : 'Base de datos'),
+      partida: p,
+    };
   });
-  pd.push([''],['','','','','','TOTAL COSTO DIRECTO','',totalBase],[],['','','','','','TOTAL OBRA (c/GI+B+IVA)','',total]);
-  const ws = XLSX.utils.aoa_to_sheet(pd);
-  ws['!cols']=[{wch:12},{wch:50},{wch:7},{wch:16},{wch:16},{wch:10},{wch:16},{wch:30}];
-  XLSX.utils.book_append_sheet(wb, ws, 'Presupuesto Final');
+
+  const caps = new Map();
+  detalle.forEach(row=>{
+    if(!caps.has(row.capId)){
+      caps.set(row.capId, {
+        capId: row.capId,
+        capName: row.capName,
+        rubros: 0,
+        totalDirecto: 0,
+        totalFinal: 0,
+      });
+    }
+    const cap = caps.get(row.capId);
+    cap.rubros += 1;
+    cap.totalDirecto += row.totalDirecto;
+    cap.totalFinal += row.totalFinal;
+  });
+
+  const totalDirecto = detalle.reduce((acc,row)=>acc + row.totalDirecto, 0);
+  const totalFinal = detalle.reduce((acc,row)=>acc + row.totalFinal, 0);
+  return {
+    meta,
+    gi,
+    bi,
+    iva,
+    factor,
+    detalle,
+    resumenCaps: Array.from(caps.values()).sort((a,b)=>String(a.capId).localeCompare(String(b.capId), 'es', { numeric: true })),
+    totalDirecto,
+    totalFinal,
+  };
+}
+
+function setWorkbookProps(wb, data){
+  wb.Props = {
+    Title: `Presupuesto ${data.meta.nro || data.meta.proyecto || ''}`.trim(),
+    Subject: 'Presupuesto de obra',
+    Author: data.meta.responsable || data.meta.empresa || 'PresupuestAPP',
+    Company: data.meta.empresa || '',
+    CreatedDate: new Date(),
+  };
+}
+
+function setRangeFormat(ws, range, format){
+  const ref = XLSX.utils.decode_range(range);
+  for(let r = ref.s.r; r <= ref.e.r; r++){
+    for(let c = ref.s.c; c <= ref.e.c; c++){
+      const cell = ws[XLSX.utils.encode_cell({ r, c })];
+      if(cell && cell.t === 'n') cell.z = format;
+    }
+  }
+}
+
+function setSheetAutofilter(ws, range){
+  ws['!autofilter'] = { ref: range };
+}
+
+function appendPortadaPresupuestoSheet(wb, data){
+  const rows = [
+    ['PRESUPUESTO DE OBRA'],
+    [''],
+    ['Proyecto', data.meta.proyecto || '-'],
+    ['Cliente', data.meta.cliente || '-'],
+    ['Ubicacion', data.meta.ubicacion || '-'],
+    ['Responsable', data.meta.responsable || '-'],
+    ['Nro. presupuesto', data.meta.nro || '-'],
+    ['Fecha', data.meta.fecha || '-'],
+    ['Empresa', data.meta.empresa || '-'],
+    ['RUC/Tel.', data.meta.ruc || '-'],
+    [''],
+    ['Costo directo', data.totalDirecto, 'Total c/GI+B+IVA', data.totalFinal],
+    ['Rubros', data.detalle.length, 'Capitulos', data.resumenCaps.length],
+    ['GI %', data.gi, 'Beneficio %', data.bi, 'IVA %', data.iva],
+  ];
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{wch:20},{wch:44},{wch:22},{wch:20},{wch:16},{wch:12}];
+  ws['!merges'] = [{ s:{r:0,c:0}, e:{r:0,c:5} }];
+  setRangeFormat(ws, 'B12:D13', '#,##0');
+  setRangeFormat(ws, 'B14:F14', '0.00');
+  XLSX.utils.book_append_sheet(wb, ws, 'Portada');
+}
+
+function appendResumenPresupuestoSheet(wb, data){
+  const rows = [
+    ['RESUMEN EJECUTIVO'],
+    ['Proyecto', data.meta.proyecto || '-', 'Nro.', data.meta.nro || '-', 'Fecha', data.meta.fecha || '-'],
+    [''],
+    ['Capitulo', 'Descripcion', 'Rubros', 'Costo directo', '% costo directo', 'Total final'],
+  ];
+  data.resumenCaps.forEach(cap=>{
+    rows.push([
+      cap.capId,
+      cap.capName,
+      cap.rubros,
+      Math.round(cap.totalDirecto),
+      data.totalDirecto ? cap.totalDirecto / data.totalDirecto : 0,
+      Math.round(cap.totalFinal),
+    ]);
+  });
+  rows.push(['', 'TOTAL', data.detalle.length, data.totalDirecto, 1, data.totalFinal]);
+
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{wch:11},{wch:42},{wch:10},{wch:18},{wch:16},{wch:18}];
+  ws['!merges'] = [{ s:{r:0,c:0}, e:{r:0,c:5} }];
+  if(rows.length > 4){
+    const last = rows.length;
+    setRangeFormat(ws, `D5:D${last}`, '#,##0');
+    setRangeFormat(ws, `E5:E${last}`, '0.0%');
+    setRangeFormat(ws, `F5:F${last}`, '#,##0');
+    setSheetAutofilter(ws, `A4:F${last}`);
+  }
+  XLSX.utils.book_append_sheet(wb, ws, 'Resumen');
+}
+
+function appendPresupuestoSheet(wb, data = buildBudgetExportData()){
+  const rows = [
+    ['PRESUPUESTO DETALLADO'],
+    ['Proyecto', data.meta.proyecto || '-', 'Cliente', data.meta.cliente || '-', 'Nro.', data.meta.nro || '-'],
+    ['GI %', data.gi, 'Beneficio %', data.bi, 'IVA %', data.iva],
+    [''],
+    ['Item','Codigo','Descripcion','Ud.','Cantidad','P. unit. directo','Total directo','P. unit. final','Total final','Capitulo','Origen']
+  ];
+
+  data.resumenCaps.forEach(cap=>{
+    rows.push([`${cap.capId}`, cap.capName, '', '', '', '', cap.totalDirecto, '', cap.totalFinal, '', '']);
+    data.detalle
+      .filter(row=>row.capId === cap.capId)
+      .forEach(row=>{
+        rows.push([
+          row.item,
+          row.cod,
+          row.desc,
+          row.u,
+          row.qty,
+          row.costoDirecto,
+          row.totalDirecto,
+          row.unitFinal,
+          row.totalFinal,
+          `${row.capId} - ${row.capName}`,
+          row.origen,
+        ]);
+      });
+  });
+
+  rows.push(['','','','','','TOTAL COSTO DIRECTO',data.totalDirecto,'TOTAL FINAL',data.totalFinal,'','']);
+
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [
+    {wch:7},{wch:13},{wch:58},{wch:8},{wch:12},
+    {wch:18},{wch:18},{wch:18},{wch:18},{wch:34},{wch:24}
+  ];
+  ws['!merges'] = [{ s:{r:0,c:0}, e:{r:0,c:10} }];
+  if(rows.length > 5){
+    const last = rows.length;
+    setRangeFormat(ws, `E6:I${last}`, '#,##0');
+    setSheetAutofilter(ws, `A5:K${last}`);
+    ws['!views'] = [{ state: 'frozen', ySplit: 5 }];
+  }
+  XLSX.utils.book_append_sheet(wb, ws, 'Presupuesto');
+}
+
+function appendApuPresupuestoSheet(wb, data){
+  const rows = [['APU DEL PRESUPUESTO'], ['']];
+  let count = 0;
+  data.detalle.forEach(row=>{
+    const p = row.partida;
+    if(p._budgetOnly || p._budgetCostEdited) return;
+    const codKey = typeof partidaKeyFromCode === 'function'
+      ? partidaKeyFromCode(p.sourceCod || p.cod)
+      : String(p.sourceCod || p.cod).replace(/\./g, '_');
+    const insumos = APU[codKey] || [];
+    if(!insumos.length) return;
+    count++;
+    rows.push([`${row.cod} - ${row.desc}`, '', '', '', 'Unidad', row.u]);
+    rows.push(['Tipo','Insumo','Unidad','Cantidad','P. unitario','Subtotal']);
+    insumos.forEach(insumo=>{
+      const tipo = { M:'Material', L:'Mano de Obra', E:'Equipo', S:'Subcontrato' }[insumo.tipo] || insumo.tipo;
+      rows.push([tipo, insumo.desc, insumo.u, insumo.qty, insumo.pu, Math.round((parseFloat(insumo.qty) || 0) * (parseFloat(insumo.pu) || 0))]);
+    });
+    rows.push(['TOTAL APU','','','',row.costoDirecto,row.u]);
+    rows.push(['']);
+  });
+  if(!count) return;
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{wch:18},{wch:54},{wch:10},{wch:12},{wch:16},{wch:16}];
+  setRangeFormat(ws, `D1:F${rows.length}`, '#,##0');
+  XLSX.utils.book_append_sheet(wb, ws, 'APU Presupuesto');
+}
+
+function appendPresupuestoProfesionalSheets(wb){
+  const data = buildBudgetExportData();
+  setWorkbookProps(wb, data);
+  appendPortadaPresupuestoSheet(wb, data);
+  appendResumenPresupuestoSheet(wb, data);
+  appendPresupuestoSheet(wb, data);
+  appendApuPresupuestoSheet(wb, data);
+  return data;
 }
 
 function appendGuardadosSheet(wb){
@@ -368,10 +588,10 @@ function exportarPresupuestoFinalExcel(){
     return;
   }
   const { wb } = getBudgetExportContext();
-  appendPresupuestoSheet(wb);
+  appendPresupuestoProfesionalSheets(wb);
   const nroFile = document.getElementById('p-nro').value||'OBRA';
   XLSX.writeFile(wb, `Presupuesto_Final_${nroFile}_${new Date().toISOString().split('T')[0]}.xlsx`);
-  notif('Presupuesto final exportado a Excel');
+  notif('Presupuesto profesional exportado a Excel');
 }
 
 function exportarExcel(){
@@ -383,7 +603,7 @@ function exportarExcel(){
   appendCapitulosSheet(wb);
   appendCatalogosSheet(wb);
   appendBaseDatosSheet(wb);
-  appendPresupuestoSheet(wb);
+  appendPresupuestoProfesionalSheets(wb);
   appendGuardadosSheet(wb);
   appendApuSheet(wb);
   const nroFile = document.getElementById('p-nro').value||'OBRA';

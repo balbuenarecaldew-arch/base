@@ -175,6 +175,7 @@ function renderCapituloRow(capId, partidas){
   const cap = capOf(capId);
   const collapsed = collapsedCapitulos.has(String(capId));
   const totalCap = partidas.reduce((acc, p)=>acc + pu(p), 0);
+  const capArg = String(capId).replace(/'/g, "\\'");
   return `
     <tr class="cap-row cap-row-toggle" data-cap="${capId}">
       <td colspan="11" style="background:${cap.color}CC">
@@ -193,6 +194,14 @@ function renderCapituloRow(capId, partidas){
             <span>${partidas.length} partida${partidas.length === 1 ? '' : 's'}</span>
           </div>
           <div class="cap-row-total">Gs. ${fmtN(totalCap)}</div>
+          <div class="cap-row-actions">
+            <button
+              type="button"
+              class="cap-row-action"
+              onclick="event.stopPropagation(); abrirNuevaPartidaEnCapitulo('${capArg}')"
+              title="Agregar partida en este capitulo"
+            >+ Partida</button>
+          </div>
         </div>
       </td>
     </tr>
@@ -200,12 +209,14 @@ function renderCapituloRow(capId, partidas){
 }
 
 function renderCapituloEmptyRow(capId){
+  const capArg = String(capId).replace(/'/g, "\\'");
   return `
     <tr class="db-empty-cap-row">
       <td colspan="11">
         <div class="empty-state" style="padding:22px 0">
           <h3 style="margin-bottom:4px">Capitulo ${capId} sin partidas</h3>
-          <p>Usa "Nueva partida" para cargar items en este capitulo.</p>
+          <p>Usa el boton del capitulo para cargar items directamente aqui.</p>
+          <button class="btn btn-primary btn-sm" onclick="abrirNuevaPartidaEnCapitulo('${capArg}')">+ Agregar partida</button>
         </div>
       </td>
     </tr>
@@ -595,7 +606,7 @@ function renderTablaApuInline(partida, insumos, totals){
   `;
 }
 
-function abrirModalPartida(id){
+function abrirModalPartida(id, preferredCapId = null){
   editPid = id || null;
   document.getElementById('f-cap').innerHTML = CAPS.map(c=>`<option value="${c.id}">${c.id} - ${c.name}</option>`).join('');
 
@@ -612,14 +623,19 @@ function abrirModalPartida(id){
     document.getElementById('f-eq').value = partida.eq;
     document.getElementById('f-sub').value = partida.sub;
   }else{
+    const defaultCap = preferredCapId && CAPS.some(cap=>cap.id === preferredCapId) ? preferredCapId : '01';
+    const capInfo = capOf(defaultCap);
+    const defaultRamo = ramoActivo !== 'todos'
+      ? ramoActivo
+      : ((capInfo.ramos || []).find(ramo=>ramo !== 'todos') || 'civil');
     document.getElementById('mp-title').textContent = 'Nueva Partida';
     document.getElementById('f-cod').value = '';
     document.getElementById('f-desc').value = '';
     ['f-mat', 'f-mo', 'f-eq', 'f-sub'].forEach(idCampo=>{
       document.getElementById(idCampo).value = 0;
     });
-    document.getElementById('f-cap').value = '01';
-    document.getElementById('f-ramo').value = ramoActivo === 'todos' ? 'civil' : ramoActivo;
+    document.getElementById('f-cap').value = defaultCap;
+    document.getElementById('f-ramo').value = defaultRamo;
     autoCod();
   }
 
@@ -629,6 +645,12 @@ function abrirModalPartida(id){
 
 function editarPartida(id){
   abrirModalPartida(id);
+}
+
+function abrirNuevaPartidaEnCapitulo(capId){
+  const targetCap = String(capId || '01');
+  collapsedCapitulos.delete(targetCap);
+  abrirModalPartida(null, targetCap);
 }
 
 function autoCod(){

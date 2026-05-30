@@ -172,11 +172,38 @@ function sanitizeCatalogosMap(catalogos){
 
 function sanitizePresupuestoList(items){
   if(!Array.isArray(items)) return [];
-  return items.map(item=>({
-    ...item,
-    pid: parseInt(item.pid, 10) || item.pid,
-    qty: parseFloat(item.qty) || 0,
-  }));
+  return items.map(item=>{
+    const pidNumber = parseInt(item.pid, 10);
+    const clean = {
+      ...item,
+      pid: Number.isFinite(pidNumber) && String(item.pid).match(/^\d+$/) ? pidNumber : sanitizeAppText(item.pid || ''),
+      qty: parseFloat(item.qty) || 0,
+      manual: Boolean(item.manual),
+    };
+
+    if(clean.manual || item.override){
+      const source = clean.manual ? clean : item.override;
+      const rubro = sanitizePartidasList([{
+        cap: source?.cap || '01',
+        cod: source?.cod || '',
+        desc: source?.desc || '',
+        u: source?.u || 'un',
+        ramo: source?.ramo || 'todos',
+        mat: source?.mat || 0,
+        mo: source?.mo || 0,
+        eq: source?.eq || 0,
+        sub: source?.sub || 0,
+      }])[0];
+
+      if(clean.manual){
+        Object.assign(clean, rubro);
+      }else{
+        clean.override = rubro;
+      }
+    }
+
+    return clean;
+  });
 }
 
 function sanitizeAppPayload(payload){

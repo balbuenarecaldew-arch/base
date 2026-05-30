@@ -259,7 +259,7 @@ tr:hover td{background:rgba(255,255,255,.015)}
 .cap-row-toggle td{padding:0!important}
 .cap-row-inner{
   display:grid;
-  grid-template-columns:44px minmax(0,1fr) auto;
+  grid-template-columns:44px minmax(0,1fr) auto auto;
   gap:14px;
   align-items:center;
   padding:12px 16px;
@@ -286,6 +286,34 @@ tr:hover td{background:rgba(255,255,255,.015)}
   font-weight:800;
   color:#f2f8fd;
   text-align:right;
+}
+.cap-row-actions{
+  display:flex;
+  justify-content:flex-end;
+  align-items:center;
+  gap:8px;
+}
+.cap-row-action{
+  min-height:34px;
+  padding:7px 12px;
+  border-radius:10px;
+  border:1px solid rgba(255,255,255,.22);
+  background:rgba(8,18,28,.24);
+  color:#f2f8fd;
+  font-size:12px;
+  font-weight:800;
+  font-family:inherit;
+  text-transform:none;
+  letter-spacing:0;
+  cursor:pointer;
+  transition:var(--transition);
+  white-space:nowrap;
+}
+.cap-row-action:hover,
+.cap-row-action:focus-visible{
+  outline:none;
+  background:rgba(255,255,255,.12);
+  border-color:rgba(255,255,255,.42);
 }
 .chapter-toggle{
   width:36px;
@@ -589,6 +617,7 @@ select option{background:var(--bg2);color:var(--txt)}
   th,td{padding:10px 12px}
   .cap-row-inner{grid-template-columns:40px 1fr;gap:10px}
   .cap-row-total{grid-column:2;text-align:left}
+  .cap-row-actions{grid-column:2;justify-content:flex-start}
 }
 @media(max-width:480px){
   .stat-cards{grid-template-columns:1fr}

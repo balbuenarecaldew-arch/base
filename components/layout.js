@@ -36,20 +36,27 @@ function setRamo(r){
 }
 
 function filtrarDB(){
-  const q = String((document.getElementById('bd-search')||{}).value || '').trim().toLowerCase();
+  const rawQ = String((document.getElementById('bd-search')||{}).value || '').trim();
+  const q = typeof bdTextKey === 'function' ? bdTextKey(rawQ) : rawQ.toLowerCase();
   const modo = typeof bdModoActivo !== 'undefined' ? bdModoActivo : 'costeo';
   const recursoIndex = modo === 'mdo' && typeof getMdoResourceIndex === 'function' ? getMdoResourceIndex() : null;
   return DB.filter(p=>{
     const esMdo = typeof isManoObraPartida === 'function' ? isManoObraPartida(p) : false;
     if(modo === 'mdo' && !esMdo) return false;
     if(modo !== 'mdo' && esMdo) return false;
-    const capRamos = capOf(p.cap).ramos || ['todos'];
+    const cap = capOf(p.cap);
+    const capRamos = cap.ramos || ['todos'];
     const coincideRamo = modo === 'mdo' || ramoActivo==='todos' || capRamos.includes(ramoActivo) || (p.ramo&&p.ramo===ramoActivo);
-    const desc = String(p.desc || '').toLowerCase();
-    const cod = String(p.cod || '').toLowerCase();
+    const desc = typeof bdTextKey === 'function' ? bdTextKey(p.desc) : String(p.desc || '').toLowerCase();
+    const cod = typeof bdTextKey === 'function' ? bdTextKey(p.cod) : String(p.cod || '').toLowerCase();
+    const capText = typeof bdTextKey === 'function'
+      ? bdTextKey(`${p.cap} ${cap.id} ${cap.name} ${p.capName || ''}`)
+      : `${p.cap} ${cap.id} ${cap.name} ${p.capName || ''}`.toLowerCase();
     const meta = modo === 'mdo' && typeof getMdoMeta === 'function' ? getMdoMeta(p, recursoIndex) : null;
-    const metaText = meta ? `${meta.categoria} ${meta.grupo}`.toLowerCase() : '';
-    const coincideTexto = !q || desc.includes(q) || cod.includes(q) || metaText.includes(q);
+    const metaText = meta
+      ? (typeof bdTextKey === 'function' ? bdTextKey(`${meta.categoria} ${meta.grupo}`) : `${meta.categoria} ${meta.grupo}`.toLowerCase())
+      : '';
+    const coincideTexto = !q || desc.includes(q) || cod.includes(q) || capText.includes(q) || metaText.includes(q);
     return coincideRamo && coincideTexto;
   });
 }
@@ -100,10 +107,16 @@ function requestBuscarGlobal(q, delay = 120){
 function buscarGlobal(q){
   const res = document.getElementById('global-results');
   if(!q || q.length < 2){ res.classList.remove('open'); return; }
-  const ql = q.toLowerCase();
+  const ql = typeof bdTextKey === 'function' ? bdTextKey(q) : q.toLowerCase();
   let html = '';
 
-  const partidas = DB.filter(p=>p.desc.toLowerCase().includes(ql)||p.cod.includes(ql)).slice(0,6);
+  const partidas = DB.filter(p=>{
+    const cap = capOf(p.cap);
+    const text = typeof bdTextKey === 'function'
+      ? bdTextKey(`${p.cod} ${p.desc} ${p.cap} ${cap.id} ${cap.name} ${p.capName || ''}`)
+      : `${p.cod} ${p.desc} ${p.cap} ${cap.id} ${cap.name} ${p.capName || ''}`.toLowerCase();
+    return text.includes(ql);
+  }).slice(0,6);
   if(partidas.length){
     html += `<div style="padding:8px 12px;font-size:10px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--borde)">Partidas (${partidas.length})</div>`;
     partidas.forEach(p=>{
