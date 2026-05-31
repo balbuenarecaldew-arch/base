@@ -17,7 +17,7 @@ function presPidEquals(a, b){
 }
 
 function presPidArg(pid){
-  return JSON.stringify(pid);
+  return `'${String(pid).replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
 }
 
 function findPresupuestoItem(pid){
@@ -40,7 +40,14 @@ function normalizeBudgetRubroData(data){
 
 function getBudgetItemPartida(item, dbById = null){
   if(!item) return null;
-  const base = item.manual ? null : (dbById || new Map(DB.map(partida=>[partida.id, partida]))).get(item.pid);
+  const baseMap = dbById || new Map(DB.map(partida=>[partida.id, partida]));
+  const base = item.manual
+    ? null
+    : (
+        baseMap.get(item.pid) ||
+        baseMap.get(String(item.pid)) ||
+        DB.find(partida=>presPidEquals(partida.id, item.pid))
+      );
   if(!base && !item.manual && !item.override) return null;
 
   const data = normalizeBudgetRubroData({
@@ -65,13 +72,16 @@ function getBudgetItemPartida(item, dbById = null){
 }
 
 function getPartidasPresupuestoMap(){
-  const ids = new Set(PRESUPUESTO.filter(item=>!item.manual).map(item=>item.pid));
+  const ids = new Set(PRESUPUESTO.filter(item=>!item.manual).map(item=>String(item.pid)));
   const dbById = new Map();
   if(ids.size){
+    let matched = 0;
     for(const partida of DB){
-      if(ids.has(partida.id)){
+      if(ids.has(String(partida.id))){
         dbById.set(partida.id, partida);
-        if(dbById.size === ids.size) break;
+        dbById.set(String(partida.id), partida);
+        matched++;
+        if(matched === ids.size) break;
       }
     }
   }
@@ -84,11 +94,14 @@ function getPartidasPresupuestoMap(){
 }
 
 function getPresupuestoResolvedItems(items = PRESUPUESTO){
-  const ids = new Set((items || []).filter(item=>!item.manual).map(item=>item.pid));
+  const ids = new Set((items || []).filter(item=>!item.manual).map(item=>String(item.pid)));
   const dbById = new Map();
   if(ids.size){
     DB.forEach(partida=>{
-      if(ids.has(partida.id)) dbById.set(partida.id, partida);
+      if(ids.has(String(partida.id))){
+        dbById.set(partida.id, partida);
+        dbById.set(String(partida.id), partida);
+      }
     });
   }
   return (items || [])
@@ -128,7 +141,7 @@ function renderSel(){
         html += `<tr><td colspan="5" style="background:${cap.color};color:#fff;padding:4px 12px;font-size:10px;font-weight:700">${p.cap} - ${cap.name}</td></tr>`;
       }
 
-      const en = presMap.has(p.id);
+      const en = presMap.has(p.id) || presMap.has(String(p.id));
       html += `
         <tr style="${en ? 'background:rgba(29,186,123,.06)' : ''}">
           <td style="padding:7px 12px"><code style="background:var(--bg2);padding:2px 6px;border-radius:4px;font-size:10px;color:var(--acento)">${p.cod}</code></td>
@@ -152,7 +165,7 @@ function addToPres(pid){
   if(ex) ex.qty += 1;
   else PRESUPUESTO.push({ pid, qty: 1 });
 
-  const p = DB.find(x => x.id === pid);
+  const p = DB.find(x => presPidEquals(x.id, pid));
   notif(p ? `${p.cod} agregado al presupuesto` : 'Partida agregada al presupuesto');
   marcarUnsaved();
   renderSel();

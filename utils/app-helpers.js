@@ -33,7 +33,10 @@ function toNonNegativeNumber(value){
 }
 
 function nextNumericId(collection){
-  return collection.length ? Math.max(...collection.map(item=>item.id)) + 1 : 1;
+  const ids = (collection || [])
+    .map(item=>Number(item?.id))
+    .filter(Number.isFinite);
+  return ids.length ? Math.max(...ids) + 1 : 1;
 }
 
 function maybeDecodeLatin1Mojibake(text){
@@ -109,18 +112,37 @@ function sanitizeCapitulosList(capitulos){
 
 function sanitizePartidasList(partidas){
   if(!Array.isArray(partidas)) return [];
-  return partidas.map(partida=>({
-    ...partida,
-    cap: String(partida.cap || '01').padStart(2, '0'),
-    cod: sanitizeAppText(partida.cod || ''),
-    desc: sanitizeAppText(partida.desc || ''),
-    u: sanitizeAppText(partida.u || 'un'),
-    ramo: sanitizeAppText(partida.ramo || 'civil').toLowerCase(),
-    mat: Math.round(parseFloat(partida.mat) || 0),
-    mo: Math.round(parseFloat(partida.mo) || 0),
-    eq: Math.round(parseFloat(partida.eq) || 0),
-    sub: Math.round(parseFloat(partida.sub) || 0),
-  }));
+  const usedIds = new Set();
+  const idMap = new Map();
+  let nextId = 1;
+
+  const cleanPartidas = partidas.map(partida=>{
+    const oldIdKey = String(partida?.id);
+    let id = Number(partida?.id);
+    if(!Number.isFinite(id) || id <= 0 || usedIds.has(id)){
+      while(usedIds.has(nextId)) nextId++;
+      id = nextId;
+    }
+    usedIds.add(id);
+    nextId = Math.max(nextId, id + 1);
+    if(oldIdKey && oldIdKey !== String(id)) idMap.set(oldIdKey, id);
+
+    return {
+      ...partida,
+      id,
+      cap: String(partida.cap || '01').padStart(2, '0'),
+      cod: sanitizeAppText(partida.cod || ''),
+      desc: sanitizeAppText(partida.desc || ''),
+      u: sanitizeAppText(partida.u || 'un'),
+      ramo: sanitizeAppText(partida.ramo || 'civil').toLowerCase(),
+      mat: Math.round(parseFloat(partida.mat) || 0),
+      mo: Math.round(parseFloat(partida.mo) || 0),
+      eq: Math.round(parseFloat(partida.eq) || 0),
+      sub: Math.round(parseFloat(partida.sub) || 0),
+    };
+  });
+  sanitizePartidasList.lastIdMap = idMap;
+  return cleanPartidas;
 }
 
 function sanitizeApuMap(apu){
@@ -210,11 +232,17 @@ function sanitizeAppPayload(payload){
   const data = sanitizeDataDeep(payload || {});
 
   if(Array.isArray(data.DB)) data.DB = sanitizePartidasList(data.DB);
+  const dbIdMap = sanitizePartidasList.lastIdMap || new Map();
   if(data.APU) data.APU = sanitizeApuMap(data.APU);
   if(data.CATALOGOS) data.CATALOGOS = sanitizeCatalogosMap(data.CATALOGOS);
   if(data.catalogos) data.catalogos = sanitizeCatalogosMap(data.catalogos);
   if(Array.isArray(data.CAPS)) data.CAPS = sanitizeCapitulosList(data.CAPS);
-  if(Array.isArray(data.PRESUPUESTO)) data.PRESUPUESTO = sanitizePresupuestoList(data.PRESUPUESTO);
+  if(Array.isArray(data.PRESUPUESTO)){
+    data.PRESUPUESTO = sanitizePresupuestoList(data.PRESUPUESTO.map(item=>{
+      const mappedId = dbIdMap.get(String(item?.pid));
+      return mappedId ? { ...item, pid: mappedId } : item;
+    }));
+  }
   if(Array.isArray(data.PRESUPUESTOS_GUARDADOS)){
     data.PRESUPUESTOS_GUARDADOS = data.PRESUPUESTOS_GUARDADOS.map(item=>sanitizeDataDeep(item));
   }
@@ -227,10 +255,16 @@ function sanitizeAppPayload(payload){
 
 function sanearEstadoApp(){
   if(typeof DB !== 'undefined') DB = sanitizePartidasList(DB);
+  const dbIdMap = sanitizePartidasList.lastIdMap || new Map();
   if(typeof APU !== 'undefined') APU = sanitizeApuMap(APU);
   if(typeof CATALOGOS !== 'undefined') CATALOGOS = sanitizeCatalogosMap(CATALOGOS);
   if(typeof CAPS !== 'undefined') CAPS = sanitizeCapitulosList(CAPS);
-  if(typeof PRESUPUESTO !== 'undefined') PRESUPUESTO = sanitizePresupuestoList(PRESUPUESTO);
+  if(typeof PRESUPUESTO !== 'undefined'){
+    PRESUPUESTO = sanitizePresupuestoList(PRESUPUESTO.map(item=>{
+      const mappedId = dbIdMap.get(String(item?.pid));
+      return mappedId ? { ...item, pid: mappedId } : item;
+    }));
+  }
   if(typeof PRESUPUESTOS_GUARDADOS !== 'undefined' && Array.isArray(PRESUPUESTOS_GUARDADOS)){
     PRESUPUESTOS_GUARDADOS = PRESUPUESTOS_GUARDADOS.map(item=>sanitizeDataDeep(item));
   }

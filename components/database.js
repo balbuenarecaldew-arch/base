@@ -406,9 +406,12 @@ function _renderBDNow(force = false){
 
 function renderPartidaSummaryRow(partida, presMap = null){
   const apu = getPartidaApu(partida.cod);
-  const presItem = presMap ? presMap.get(partida.id) : PRESUPUESTO.find(item=>item.pid === partida.id);
+  const presItem = presMap
+    ? (presMap.get(partida.id) || presMap.get(String(partida.id)))
+    : PRESUPUESTO.find(item=>String(item.pid) === String(partida.id));
   const enPres = Boolean(presItem);
   const qtyPres = presItem ? presItem.qty : 0;
+  const pidArg = typeof presPidArg === 'function' ? presPidArg(partida.id) : JSON.stringify(partida.id);
   const open = expandedPartidas.has(String(partida.id));
   const rowBg = enPres ? 'background:rgba(94,200,255,.06);border-left:2px solid var(--acento)' : '';
   const ramoBadge = partida.ramo && partida.ramo !== 'todos'
@@ -453,14 +456,14 @@ function renderPartidaSummaryRow(partida, presMap = null){
       <td class="num" style="color:var(--naranja)">${valorTablaBD(partida.sub)}</td>
       <td class="num total-cell">${fmtN(pu(partida))}</td>
       <td>
-        <div class="table-actions">
-          <div class="budget-action-group">
-            <button class="budget-action-btn add" onclick="addToPres(${partida.id})">${enPres ? 'Agregar +1' : 'Agregar'}</button>
-            <button class="budget-action-btn remove" onclick="quitarPres(${partida.id})" ${enPres ? '' : 'disabled'}>Excluir</button>
+          <div class="table-actions">
+            <div class="budget-action-group">
+            <button class="budget-action-btn add" onclick="addToPres(${pidArg})">${enPres ? 'Agregar +1' : 'Agregar'}</button>
+            <button class="budget-action-btn remove" onclick="quitarPres(${pidArg})" ${enPres ? '' : 'disabled'}>Excluir</button>
           </div>
           <div class="table-actions-secondary">
-            <button class="btn btn-secondary btn-xs" onclick="editarPartida(${partida.id})">Editar</button>
-            <button class="btn btn-danger btn-xs" onclick="eliminarPartida(${partida.id})">Eliminar</button>
+            <button class="btn btn-secondary btn-xs" onclick="editarPartida(${pidArg})">Editar</button>
+            <button class="btn btn-danger btn-xs" onclick="eliminarPartida(${pidArg})">Eliminar</button>
           </div>
         </div>
       </td>
@@ -607,11 +610,16 @@ function renderTablaApuInline(partida, insumos, totals){
 }
 
 function abrirModalPartida(id, preferredCapId = null){
-  editPid = id || null;
+  editPid = id == null ? null : id;
   document.getElementById('f-cap').innerHTML = CAPS.map(c=>`<option value="${c.id}">${c.id} - ${c.name}</option>`).join('');
 
-  if(id){
-    const partida = DB.find(item=>item.id === id);
+  if(id != null){
+    const partida = DB.find(item=>String(item.id) === String(id));
+    if(!partida){
+      notif('No se encontro la partida para editar', '#E05555');
+      editPid = null;
+      return;
+    }
     document.getElementById('mp-title').textContent = `Editar Partida - ${partida.cod}`;
     document.getElementById('f-cap').value = partida.cap;
     document.getElementById('f-cod').value = partida.cod;
@@ -679,14 +687,21 @@ function guardarPartida(){
     return;
   }
 
-  const codigoDuplicado = DB.some(partida=>partida.cod === cod && partida.id !== editPid);
+  const editando = editPid != null;
+  const codigoDuplicado = DB.some(partida=>partida.cod === cod && String(partida.id) !== String(editPid));
   if(codigoDuplicado){
     notif('Ya existe una partida con ese codigo', '#E05555');
     return;
   }
 
+  const idxEditando = editando ? DB.findIndex(item=>String(item.id) === String(editPid)) : -1;
+  const idActual = idxEditando >= 0 ? Number(DB[idxEditando].id) : null;
+  const partidaId = editando && Number.isFinite(idActual) && idActual > 0
+    ? idActual
+    : nextNumericId(DB);
+
   const partida = {
-    id: editPid || nextNumericId(DB),
+    id: partidaId,
     cap: document.getElementById('f-cap').value,
     cod,
     desc,
@@ -698,11 +713,17 @@ function guardarPartida(){
     sub: toNonNegativeNumber(document.getElementById('f-sub').value),
   };
 
-  if(editPid){
-    const idx = DB.findIndex(item=>item.id === editPid);
+  if(editando && idxEditando >= 0){
+    const idx = idxEditando;
     const anterior = DB[idx];
     pushHistorial('editPartida', { partida: { ...anterior } });
     DB[idx] = partida;
+
+    if(String(anterior.id) !== String(partida.id)){
+      PRESUPUESTO.forEach(item=>{
+        if(String(item.pid) === String(anterior.id)) item.pid = partida.id;
+      });
+    }
 
     if(anterior.cod !== cod){
       const oldKey = partidaKeyFromCode(anterior.cod);
@@ -722,11 +743,15 @@ function guardarPartida(){
   renderPres();
   refreshMateriales();
   refreshDashboard();
-  notif(editPid ? 'Partida actualizada' : 'Partida agregada');
+  notif(editando ? 'Partida actualizada' : 'Partida agregada');
 }
 
 function eliminarPartida(id){
-  const partida = DB.find(item=>item.id === id);
+  const partida = DB.find(item=>String(item.id) === String(id));
+  if(!partida){
+    notif('No se encontro la partida para eliminar', '#E05555');
+    return;
+  }
   const ok = prompt(`Para eliminar escribi el codigo exacto:\n\n"${partida.cod} - ${partida.desc}"\n\nCodigo:`);
   if(ok === null) return;
   if(ok.trim() !== partida.cod){
@@ -734,8 +759,8 @@ function eliminarPartida(id){
     return;
   }
 
-  const idx = DB.findIndex(item=>item.id === id);
-  const presItems = PRESUPUESTO.filter(item=>item.pid === id);
+  const idx = DB.findIndex(item=>String(item.id) === String(id));
+  const presItems = PRESUPUESTO.filter(item=>String(item.pid) === String(id));
   pushHistorial('elimPartida', {
     idx,
     partida: { ...partida },
@@ -743,8 +768,8 @@ function eliminarPartida(id){
     presItems: [...presItems],
   });
 
-  DB = DB.filter(item=>item.id !== id);
-  PRESUPUESTO = PRESUPUESTO.filter(item=>item.pid !== id);
+  DB = DB.filter(item=>String(item.id) !== String(id));
+  PRESUPUESTO = PRESUPUESTO.filter(item=>String(item.pid) !== String(id));
   expandedPartidas.delete(String(id));
   delete APU[partidaKeyFromCode(partida.cod)];
   marcarUnsaved();
