@@ -216,7 +216,8 @@ function renderDashboard(force = false){
     const n = capOf(k).name;
     return n.length > 22 ? `${n.substring(0, 21)}...` : n;
   });
-  const capData = capKeys.map(k => Math.round(byCap[k]));
+  const capTotals = capKeys.map(k => Math.round(byCap[k]));
+  const capData = capKeys.map(k => cd > 0 ? (byCap[k] / cd * 100) : 0);
   const capColors = capKeys.map(k => capOf(k).color);
 
   const ctxCaps = ensureDashboardCanvas('chart-caps', 'chart-caps host not found');
@@ -232,6 +233,7 @@ function renderDashboard(force = false){
             labels: capLabels,
             datasets: [{
               data: capData,
+              rawTotals: capTotals,
               backgroundColor: capColors.map(c => c + 'BB'),
               borderColor: capColors,
               borderWidth: 1,
@@ -241,24 +243,31 @@ function renderDashboard(force = false){
           options: {
             responsive: true,
             maintainAspectRatio: false,
+            indexAxis: 'y',
             plugins: {
               legend: { display: false },
               tooltip: {
                 callbacks: {
-                  label: ctx => `Gs. ${Math.round(ctx.raw).toLocaleString('es-PY')}`,
+                  label: ctx => {
+                    const value = Number(ctx.raw) || 0;
+                    const totalCap = ctx.dataset.rawTotals?.[ctx.dataIndex] || 0;
+                    return `${value.toFixed(1)}% | Gs. ${Math.round(totalCap).toLocaleString('es-PY')}`;
+                  },
                 },
               },
             },
             scales: {
-              x: { grid: { color: 'rgba(255,255,255,.05)' }, ticks: { color: '#8aa7be', font: { size: 10 } } },
-              y: {
+              x: {
+                min: 0,
+                max: 100,
                 grid: { color: 'rgba(255,255,255,.05)' },
                 ticks: {
                   color: '#8aa7be',
                   font: { size: 10 },
-                  callback: v => `Gs. ${Math.round(v / 1000).toLocaleString('es-PY')}k`,
+                  callback: v => `${v}%`,
                 },
               },
+              y: { grid: { color: 'rgba(255,255,255,.05)' }, ticks: { color: '#8aa7be', font: { size: 10 } } },
             },
           },
         });
@@ -275,9 +284,17 @@ function renderDashboard(force = false){
     if(dashCharts.tipos){
       try { dashCharts.tipos.destroy(); } catch (e) {}
     }
-    const tiposData = [Math.round(matT), Math.round(moT), Math.round(eqT), Math.round(subT)].filter(v => v > 0);
-    const tiposLabels = ['Materiales', 'Mano de Obra', 'Equipo', 'Subcontrato'].filter((_, i) => [matT, moT, eqT, subT][i] > 0);
-    const tiposColors = ['#77c8ff', '#5ec8ff', '#D4B820', '#E89020'].filter((_, i) => [matT, moT, eqT, subT][i] > 0);
+    const tipoTotal = matT + moT + eqT + subT;
+    const tiposSource = [
+      { label: 'Materiales', total: Math.round(matT), color: '#77c8ff' },
+      { label: 'Mano de Obra', total: Math.round(moT), color: '#5ec8ff' },
+      { label: 'Equipo', total: Math.round(eqT), color: '#D4B820' },
+      { label: 'Subcontrato', total: Math.round(subT), color: '#E89020' },
+    ].filter(item => item.total > 0);
+    const tiposData = tiposSource.map(item => tipoTotal > 0 ? (item.total / tipoTotal * 100) : 0);
+    const tiposLabels = tiposSource.map(item => item.label);
+    const tiposColors = tiposSource.map(item => item.color);
+    const tiposTotals = tiposSource.map(item => item.total);
     if(tiposData.length){
       try{
         dashCharts.tipos = new Chart(ctxTipos, {
@@ -286,6 +303,7 @@ function renderDashboard(force = false){
             labels: tiposLabels,
             datasets: [{
               data: tiposData,
+              rawTotals: tiposTotals,
               backgroundColor: tiposColors.map(c => c + 'CC'),
               borderColor: tiposColors,
               borderWidth: 2,
@@ -299,7 +317,11 @@ function renderDashboard(force = false){
               legend: { position: 'bottom', labels: { color: '#a7bfd3', font: { size: 11 }, padding: 14 } },
               tooltip: {
                 callbacks: {
-                  label: ctx => `${ctx.label}: Gs. ${Math.round(ctx.raw).toLocaleString('es-PY')} (${((ctx.raw / (matT + moT + eqT + subT)) * 100).toFixed(1)}%)`,
+                  label: ctx => {
+                    const value = Number(ctx.raw) || 0;
+                    const totalTipo = ctx.dataset.rawTotals?.[ctx.dataIndex] || 0;
+                    return `${ctx.label}: ${value.toFixed(1)}% | Gs. ${Math.round(totalTipo).toLocaleString('es-PY')}`;
+                  },
                 },
               },
             },

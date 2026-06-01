@@ -32,11 +32,11 @@ function recalcResumen(){
   if(!Object.keys(byCap).length){
     cHtml = '<p style="color:var(--txt3);font-style:italic;font-size:12px">Sin partidas en el presupuesto</p>';
   }else{
-    const mx = Math.max(...Object.values(byCap));
     Object.keys(byCap).sort().forEach(cid => {
       const cap = capOf(cid);
-      const pct = cd > 0 ? (byCap[cid] / cd * 100).toFixed(1) : 0;
-      const w = mx > 0 ? (byCap[cid] / mx * 100).toFixed(1) : 0;
+      const pctValue = cd > 0 ? (byCap[cid] / cd * 100) : 0;
+      const pct = pctValue.toFixed(1);
+      const w = Math.max(0, Math.min(100, pctValue)).toFixed(1);
       cHtml += `<div class="barra-item"><div class="barra-label"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${cap.color};margin-right:5px"></span>${cid}. ${cap.name}</div><div class="barra-track"><div class="barra-fill" style="width:${w}%;background:${cap.color}"></div></div><div class="barra-val">${pct}% - ${fmtN(byCap[cid])}</div></div>`;
     });
   }
@@ -53,8 +53,10 @@ function recalcResumen(){
       ['Subcontrato', subT, '#E89020'],
     ].forEach(([label, value, color]) => {
       if(!value) return;
-      const pct = (value / cd * 100).toFixed(1);
-      tHtml += `<div class="barra-item"><div class="barra-label" style="color:${color};font-weight:700">${label}</div><div class="barra-track"><div class="barra-fill" style="width:${pct}%;background:${color}"></div></div><div class="barra-val" style="color:${color}">${pct}% - ${fmtN(value)}</div></div>`;
+      const pctValue = value / cd * 100;
+      const pct = pctValue.toFixed(1);
+      const w = Math.max(0, Math.min(100, pctValue)).toFixed(1);
+      tHtml += `<div class="barra-item"><div class="barra-label" style="color:${color};font-weight:700">${label}</div><div class="barra-track"><div class="barra-fill" style="width:${w}%;background:${color}"></div></div><div class="barra-val" style="color:${color}">${pct}% - ${fmtN(value)}</div></div>`;
     });
   }
   document.getElementById('res-tipos').innerHTML = tHtml;
