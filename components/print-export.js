@@ -327,16 +327,19 @@ function buildBudgetExportData(){
     const unitFinal = puFinal(p);
     const qty = parseFloat(item.qty) || 0;
     const cap = capOf(p.cap);
+    const parts = typeof getBudgetCostParts === 'function'
+      ? getBudgetCostParts(p)
+      : { mat: p.mat || 0, mo: p.mo || 0, eq: p.eq || 0, sub: p.sub || 0 };
     return {
       item: index + 1,
       cod: p.cod,
       desc: p.desc,
       u: p.u,
       qty,
-      mat: p.mat || 0,
-      mo: p.mo || 0,
-      eq: p.eq || 0,
-      sub: p.sub || 0,
+      mat: Math.round(parts.mat || 0),
+      mo: Math.round(parts.mo || 0),
+      eq: Math.round(parts.eq || 0),
+      sub: Math.round(parts.sub || 0),
       costoDirecto,
       unitFinal,
       totalDirecto: Math.round(costoDirecto * qty),
@@ -367,6 +370,30 @@ function buildBudgetExportData(){
 
   const totalDirecto = detalle.reduce((acc,row)=>acc + row.totalDirecto, 0);
   const totalFinal = detalle.reduce((acc,row)=>acc + row.totalFinal, 0);
+  const typeTotals = {
+    mat: detalle.reduce((acc,row)=>acc + row.mat * row.qty, 0),
+    mo: detalle.reduce((acc,row)=>acc + row.mo * row.qty, 0),
+    eq: detalle.reduce((acc,row)=>acc + row.eq * row.qty, 0),
+    sub: detalle.reduce((acc,row)=>acc + row.sub * row.qty, 0),
+  };
+  const typeDiff = Math.round(totalDirecto - Object.values(typeTotals).reduce((acc,value)=>acc + value, 0));
+  if(typeDiff){
+    const target = Object.keys(typeTotals).sort((a,b)=>typeTotals[b] - typeTotals[a]).find(key=>typeTotals[key] > 0) || 'mat';
+    typeTotals[target] += typeDiff;
+  }
+  const typeLabels = {
+    mat: 'Materiales',
+    mo: 'Mano de Obra',
+    eq: 'Equipo',
+    sub: 'Subcontrato',
+  };
+  const resumenTipos = Object.entries(typeTotals).map(([key, total])=>({
+    key,
+    label: typeLabels[key],
+    total: Math.round(total),
+    pct: totalDirecto ? total / totalDirecto : 0,
+  }));
+
   return {
     meta,
     gi,
@@ -375,6 +402,8 @@ function buildBudgetExportData(){
     factor,
     detalle,
     resumenCaps: Array.from(caps.values()).sort((a,b)=>String(a.capId).localeCompare(String(b.capId), 'es', { numeric: true })),
+    resumenTipos,
+    topRubros: detalle.slice().sort((a,b)=>b.totalDirecto - a.totalDirecto).slice(0, 15),
     totalDirecto,
     totalFinal,
   };
@@ -404,6 +433,24 @@ function setSheetAutofilter(ws, range){
   ws['!autofilter'] = { ref: range };
 }
 
+function setSheetLayout(ws, options = {}){
+  ws['!margins'] = {
+    left: 0.35,
+    right: 0.35,
+    top: 0.55,
+    bottom: 0.55,
+    header: 0.2,
+    footer: 0.2,
+  };
+  if(options.freezeRows) ws['!views'] = [{ state: 'frozen', ySplit: options.freezeRows }];
+  if(options.rowHeights){
+    ws['!rows'] = ws['!rows'] || [];
+    Object.entries(options.rowHeights).forEach(([idx, hpt])=>{
+      ws['!rows'][Number(idx)] = { hpt };
+    });
+  }
+}
+
 function appendPortadaPresupuestoSheet(wb, data){
   const rows = [
     ['PRESUPUESTO DE OBRA'],
@@ -420,12 +467,15 @@ function appendPortadaPresupuestoSheet(wb, data){
     ['Costo directo', data.totalDirecto, 'Total c/GI+B+IVA', data.totalFinal],
     ['Rubros', data.detalle.length, 'Capitulos', data.resumenCaps.length],
     ['GI %', data.gi, 'Beneficio %', data.bi, 'IVA %', data.iva],
+    [''],
+    ['Tipo dominante', data.resumenTipos.slice().sort((a,b)=>b.total - a.total)[0]?.label || '-', 'Mayor capitulo', data.resumenCaps.slice().sort((a,b)=>b.totalDirecto - a.totalDirecto)[0]?.capName || '-'],
   ];
   const ws = XLSX.utils.aoa_to_sheet(rows);
   ws['!cols'] = [{wch:20},{wch:44},{wch:22},{wch:20},{wch:16},{wch:12}];
   ws['!merges'] = [{ s:{r:0,c:0}, e:{r:0,c:5} }];
   setRangeFormat(ws, 'B12:D13', '#,##0');
   setRangeFormat(ws, 'B14:F14', '0.00');
+  setSheetLayout(ws, { rowHeights: { 0: 28, 11: 24 } });
   XLSX.utils.book_append_sheet(wb, ws, 'Portada');
 }
 
@@ -457,6 +507,7 @@ function appendResumenPresupuestoSheet(wb, data){
     setRangeFormat(ws, `E5:E${last}`, '0.0%');
     setRangeFormat(ws, `F5:F${last}`, '#,##0');
     setSheetAutofilter(ws, `A4:F${last}`);
+    setSheetLayout(ws, { freezeRows: 4, rowHeights: { 0: 24 } });
   }
   XLSX.utils.book_append_sheet(wb, ws, 'Resumen');
 }
@@ -467,11 +518,11 @@ function appendPresupuestoSheet(wb, data = buildBudgetExportData()){
     ['Proyecto', data.meta.proyecto || '-', 'Cliente', data.meta.cliente || '-', 'Nro.', data.meta.nro || '-'],
     ['GI %', data.gi, 'Beneficio %', data.bi, 'IVA %', data.iva],
     [''],
-    ['Item','Codigo','Descripcion','Ud.','Cantidad','P. unit. directo','Total directo','P. unit. final','Total final','Capitulo','Origen']
+    ['Item','Codigo','Descripcion','Ud.','Cantidad','Mat. unit.','M.O. unit.','Eq. unit.','Subc. unit.','P. unit. directo','Total directo','P. unit. final','Total final','Capitulo','Origen']
   ];
 
   data.resumenCaps.forEach(cap=>{
-    rows.push([`${cap.capId}`, cap.capName, '', '', '', '', cap.totalDirecto, '', cap.totalFinal, '', '']);
+    rows.push([`${cap.capId}`, cap.capName, '', '', '', '', '', '', '', '', cap.totalDirecto, '', cap.totalFinal, '', '']);
     data.detalle
       .filter(row=>row.capId === cap.capId)
       .forEach(row=>{
@@ -481,6 +532,10 @@ function appendPresupuestoSheet(wb, data = buildBudgetExportData()){
           row.desc,
           row.u,
           row.qty,
+          row.mat,
+          row.mo,
+          row.eq,
+          row.sub,
           row.costoDirecto,
           row.totalDirecto,
           row.unitFinal,
@@ -491,21 +546,68 @@ function appendPresupuestoSheet(wb, data = buildBudgetExportData()){
       });
   });
 
-  rows.push(['','','','','','TOTAL COSTO DIRECTO',data.totalDirecto,'TOTAL FINAL',data.totalFinal,'','']);
+  rows.push(['','','','','','','','','','TOTAL COSTO DIRECTO',data.totalDirecto,'TOTAL FINAL',data.totalFinal,'','']);
 
   const ws = XLSX.utils.aoa_to_sheet(rows);
   ws['!cols'] = [
     {wch:7},{wch:13},{wch:58},{wch:8},{wch:12},
-    {wch:18},{wch:18},{wch:18},{wch:18},{wch:34},{wch:24}
+    {wch:14},{wch:14},{wch:14},{wch:14},{wch:18},{wch:18},{wch:18},{wch:18},{wch:34},{wch:24}
   ];
-  ws['!merges'] = [{ s:{r:0,c:0}, e:{r:0,c:10} }];
+  ws['!merges'] = [{ s:{r:0,c:0}, e:{r:0,c:14} }];
   if(rows.length > 5){
     const last = rows.length;
-    setRangeFormat(ws, `E6:I${last}`, '#,##0');
-    setSheetAutofilter(ws, `A5:K${last}`);
-    ws['!views'] = [{ state: 'frozen', ySplit: 5 }];
+    setRangeFormat(ws, `E6:M${last}`, '#,##0');
+    setSheetAutofilter(ws, `A5:O${last}`);
+    setSheetLayout(ws, { freezeRows: 5, rowHeights: { 0: 24 } });
   }
   XLSX.utils.book_append_sheet(wb, ws, 'Presupuesto');
+}
+
+function appendAnalisisCostosSheet(wb, data){
+  const rows = [
+    ['ANALISIS DE COSTOS'],
+    ['Proyecto', data.meta.proyecto || '-', 'Nro.', data.meta.nro || '-', 'Fecha', data.meta.fecha || '-'],
+    [''],
+    ['Distribucion por tipo de costo'],
+    ['Tipo', 'Costo directo', '% del costo directo'],
+  ];
+  data.resumenTipos.forEach(tipo=>{
+    rows.push([tipo.label, tipo.total, tipo.pct]);
+  });
+  rows.push(['TOTAL', data.totalDirecto, 1]);
+  rows.push(['']);
+  rows.push(['Rubros principales']);
+  rows.push(['#', 'Codigo', 'Descripcion', 'Capitulo', 'Cantidad', 'P. unit. directo', 'Total directo', '% del presupuesto', 'Origen']);
+  data.topRubros.forEach((row, idx)=>{
+    rows.push([
+      idx + 1,
+      row.cod,
+      row.desc,
+      `${row.capId} - ${row.capName}`,
+      row.qty,
+      row.costoDirecto,
+      row.totalDirecto,
+      data.totalDirecto ? row.totalDirecto / data.totalDirecto : 0,
+      row.origen,
+    ]);
+  });
+
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [
+    {wch:10},{wch:16},{wch:52},{wch:34},{wch:12},{wch:18},{wch:18},{wch:18},{wch:24}
+  ];
+  setRangeFormat(ws, `B6:B10`, '#,##0');
+  setRangeFormat(ws, `C6:C10`, '0.0%');
+  const topHeader = 13;
+  const topStart = 14;
+  const topEnd = rows.length;
+  if(topEnd >= topStart){
+    setRangeFormat(ws, `E${topStart}:H${topEnd}`, '#,##0');
+    setRangeFormat(ws, `H${topStart}:H${topEnd}`, '0.0%');
+    setSheetAutofilter(ws, `A${topHeader}:I${topEnd}`);
+  }
+  setSheetLayout(ws, { freezeRows: 5, rowHeights: { 0: 24, 3: 20, 11: 20 } });
+  XLSX.utils.book_append_sheet(wb, ws, 'Analisis Costos');
 }
 
 function appendApuPresupuestoSheet(wb, data){
@@ -533,6 +635,7 @@ function appendApuPresupuestoSheet(wb, data){
   const ws = XLSX.utils.aoa_to_sheet(rows);
   ws['!cols'] = [{wch:18},{wch:54},{wch:10},{wch:12},{wch:16},{wch:16}];
   setRangeFormat(ws, `D1:F${rows.length}`, '#,##0');
+  setSheetLayout(ws, { freezeRows: 2, rowHeights: { 0: 24 } });
   XLSX.utils.book_append_sheet(wb, ws, 'APU Presupuesto');
 }
 
@@ -541,6 +644,7 @@ function appendPresupuestoProfesionalSheets(wb){
   setWorkbookProps(wb, data);
   appendPortadaPresupuestoSheet(wb, data);
   appendResumenPresupuestoSheet(wb, data);
+  appendAnalisisCostosSheet(wb, data);
   appendPresupuestoSheet(wb, data);
   appendApuPresupuestoSheet(wb, data);
   return data;

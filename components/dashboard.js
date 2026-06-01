@@ -3,7 +3,7 @@ function ensureDashboardCanvas(canvasId, fallbackMessage){
   if(canvas) return canvas;
 
   if(canvasId === 'chart-caps'){
-    const host = document.querySelector('#tab-dashboard .card:nth-of-type(1) .chart-wrap');
+    const host = document.getElementById('chart-caps-host');
     if(host){
       host.innerHTML = `<canvas id="chart-caps"></canvas>`;
       return document.getElementById('chart-caps');
@@ -11,7 +11,7 @@ function ensureDashboardCanvas(canvasId, fallbackMessage){
   }
 
   if(canvasId === 'chart-tipos'){
-    const host = document.querySelector('#tab-dashboard .card:nth-of-type(2) .chart-wrap');
+    const host = document.getElementById('chart-tipos-host');
     if(host){
       host.innerHTML = `<canvas id="chart-tipos"></canvas>`;
       return document.getElementById('chart-tipos');
@@ -34,6 +34,123 @@ function requestRenderDashboard(delay = 180){
   if(!isDashboardActive()) return;
   clearTimeout(_dashboardRenderTimer);
   _dashboardRenderTimer = setTimeout(()=>renderDashboard(true), delay);
+}
+
+function buildDashboardRows(factor){
+  const rows = typeof getPresupuestoResolvedItems === 'function'
+    ? getPresupuestoResolvedItems()
+    : PRESUPUESTO.map(item=>({
+        item,
+        p: new Map(DB.map(partida=>[partida.id, partida])).get(item.pid),
+      })).filter(entry=>entry.p);
+
+  return rows.map(({ item, p })=>{
+    const qty = Math.max(0, parseFloat(item.qty) || 0);
+    const directo = Math.round(pu(p) * qty);
+    const final = Math.round(directo * factor);
+    return {
+      item,
+      p,
+      qty,
+      directo,
+      final,
+      capName: capOf(p.cap).name,
+      origen: p._budgetOnly ? 'Manual' : (p._budgetEdited ? 'Editado' : 'Base'),
+    };
+  });
+}
+
+function renderDashboardInsights(rows, breakdown, cd, total, factor){
+  const host = document.getElementById('dash-insights');
+  if(!host) return;
+  if(!rows.length){
+    host.innerHTML = '<div class="empty-state"><h3>Sin presupuesto activo</h3><p>Agrega partidas para ver indicadores de control.</p></div>';
+    return;
+  }
+
+  const tipos = [
+    ['Materiales', breakdown.tipos.mat, '#77c8ff'],
+    ['Mano de Obra', breakdown.tipos.mo, '#5ec8ff'],
+    ['Equipo', breakdown.tipos.eq, '#D4B820'],
+    ['Subcontrato', breakdown.tipos.sub, '#E89020'],
+  ].sort((a,b)=>b[1] - a[1]);
+  const mainType = tipos[0];
+  const caps = Object.entries(breakdown.byCap).sort((a,b)=>b[1] - a[1]);
+  const mainCap = caps[0] || ['-', 0];
+  const manuales = rows.filter(row=>row.p._budgetOnly || row.p._budgetEdited).length;
+  const promedio = rows.length ? Math.round(cd / rows.length) : 0;
+
+  host.innerHTML = `
+    <div class="dash-insight-list">
+      <div class="dash-insight">
+        <div>
+          <div class="dash-insight-label">Mayor tipo de costo</div>
+          <div class="dash-insight-value" style="color:${mainType[2]}">${mainType[0]}</div>
+          <div class="dash-insight-sub">${cd ? ((mainType[1] / cd) * 100).toFixed(1) : 0}% del costo directo</div>
+        </div>
+        <div class="dash-insight-kpi">${fmt(mainType[1])}</div>
+      </div>
+      <div class="dash-insight">
+        <div>
+          <div class="dash-insight-label">Capítulo dominante</div>
+          <div class="dash-insight-value">${capOf(mainCap[0]).name || '-'}</div>
+          <div class="dash-insight-sub">${mainCap[0]} | ${cd ? ((mainCap[1] / cd) * 100).toFixed(1) : 0}% del presupuesto</div>
+        </div>
+        <div class="dash-insight-kpi">${fmt(mainCap[1])}</div>
+      </div>
+      <div class="dash-insight">
+        <div>
+          <div class="dash-insight-label">Rubros adaptados</div>
+          <div class="dash-insight-value">${manuales} de ${rows.length}</div>
+          <div class="dash-insight-sub">Manual o editado solo para este presupuesto</div>
+        </div>
+        <div class="dash-insight-kpi">${rows.length ? ((manuales / rows.length) * 100).toFixed(0) : 0}%</div>
+      </div>
+      <div class="dash-insight">
+        <div>
+          <div class="dash-insight-label">Promedio por rubro</div>
+          <div class="dash-insight-value">${fmt(promedio)}</div>
+          <div class="dash-insight-sub">Costo directo promedio | factor ${(factor).toFixed(3)}</div>
+        </div>
+        <div class="dash-insight-kpi">${fmt(total)}</div>
+      </div>
+    </div>
+  `;
+}
+
+function renderDashboardTopRubros(rows){
+  const host = document.getElementById('dash-top-rubros');
+  if(!host) return;
+  const top = rows.slice().sort((a,b)=>b.directo - a.directo).slice(0, 8);
+  if(!top.length){
+    host.innerHTML = '<div class="empty-state"><h3>Sin rubros</h3><p>El presupuesto activo todavía no tiene partidas.</p></div>';
+    return;
+  }
+
+  host.innerHTML = `
+    <div class="tbl-wrap-fixed" style="max-height:330px">
+      <table class="dash-mini-table">
+        <thead><tr>
+          <th>#</th><th>Rubro</th><th>Cap.</th><th class="num">Cant.</th><th class="num">Costo directo</th><th>Origen</th>
+        </tr></thead>
+        <tbody>
+          ${top.map((row, idx)=>`
+            <tr>
+              <td class="dash-rank">${idx + 1}</td>
+              <td>
+                <div style="font-weight:700;color:var(--txt)">${row.p.cod}</div>
+                <div style="color:var(--txt3);font-size:11px;line-height:1.25">${row.p.desc}</div>
+              </td>
+              <td style="color:var(--txt2)">${row.p.cap}</td>
+              <td class="num">${row.qty % 1 === 0 ? row.qty : row.qty.toFixed(2)}</td>
+              <td class="num" style="color:var(--acento);font-weight:800">${fmtN(row.directo)}</td>
+              <td><span class="chip ${row.origen === 'Base' ? 'chip-muted' : 'chip-success'}">${row.origen}</span></td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
 }
 
 function renderDashboard(force = false){
@@ -82,21 +199,17 @@ function renderDashboard(force = false){
   const dbById = typeof getPartidasPresupuestoMap === 'function'
     ? getPartidasPresupuestoMap()
     : new Map(DB.map(p=>[p.id, p]));
-  const byCap = {};
-  let matT = 0;
-  let moT = 0;
-  let eqT = 0;
-  let subT = 0;
-  PRESUPUESTO.forEach(it => {
-    const p = dbById.get(it.pid);
-    if(!p) return;
-    if(!byCap[p.cap]) byCap[p.cap] = 0;
-    byCap[p.cap] += pu(p) * it.qty;
-    matT += (p.mat || 0) * it.qty;
-    moT += (p.mo || 0) * it.qty;
-    eqT += (p.eq || 0) * it.qty;
-    subT += (p.sub || 0) * it.qty;
-  });
+  const breakdown = typeof getBudgetCostBreakdown === 'function'
+    ? getBudgetCostBreakdown()
+    : { byCap: {}, tipos: { mat: 0, mo: 0, eq: 0, sub: 0 } };
+  const dashboardRows = buildDashboardRows(factor);
+  const byCap = breakdown.byCap;
+  const matT = breakdown.tipos.mat;
+  const moT = breakdown.tipos.mo;
+  const eqT = breakdown.tipos.eq;
+  const subT = breakdown.tipos.sub;
+  renderDashboardInsights(dashboardRows, breakdown, cd, total, factor);
+  renderDashboardTopRubros(dashboardRows);
 
   const capKeys = Object.keys(byCap).sort();
   const capLabels = capKeys.map(k => {

@@ -109,6 +109,85 @@ function getPresupuestoResolvedItems(items = PRESUPUESTO){
     .filter(entry=>entry.p);
 }
 
+function getBudgetCostParts(partida){
+  const fallback = {
+    mat: Math.round(parseFloat(partida?.mat) || 0),
+    mo: Math.round(parseFloat(partida?.mo) || 0),
+    eq: Math.round(parseFloat(partida?.eq) || 0),
+    sub: Math.round(parseFloat(partida?.sub) || 0),
+  };
+  const unitTotal = fallback.mat + fallback.mo + fallback.eq + fallback.sub;
+  let parts = { ...fallback };
+
+  const canUseApu = partida
+    && !partida._budgetOnly
+    && !partida._budgetCostEdited
+    && typeof getPartidaApu === 'function'
+    && typeof getApuTotals === 'function';
+
+  if(canUseApu){
+    const apu = getPartidaApu(partida.sourceCod || partida.cod);
+    if(Array.isArray(apu) && apu.length){
+      const totals = getApuTotals(apu);
+      const apuParts = {
+        mat: Math.round(totals.M || 0),
+        mo: Math.round(totals.L || 0),
+        eq: Math.round(totals.E || 0),
+        sub: Math.round(totals.S || 0),
+      };
+      const apuTotal = apuParts.mat + apuParts.mo + apuParts.eq + apuParts.sub;
+      const tolerance = Math.max(10, Math.abs(unitTotal) * 0.01);
+      if(apuTotal > 0 && (!unitTotal || Math.abs(apuTotal - unitTotal) <= tolerance)){
+        parts = apuParts;
+      }
+    }
+  }
+
+  const partsTotal = parts.mat + parts.mo + parts.eq + parts.sub;
+  const diff = unitTotal - partsTotal;
+  if(diff){
+    const order = ['mat', 'mo', 'eq', 'sub'].sort((a,b)=>parts[b] - parts[a]);
+    const target = order.find(key=>parts[key] > 0) || 'mat';
+    parts[target] += diff;
+  }
+  return parts;
+}
+
+function getBudgetCostBreakdown(items = PRESUPUESTO){
+  const byCap = {};
+  const tipos = { mat: 0, mo: 0, eq: 0, sub: 0 };
+  let totalDirecto = 0;
+
+  getPresupuestoResolvedItems(items).forEach(({ item, p })=>{
+    const qty = Math.max(0, parseFloat(item.qty) || 0);
+    const unitTotal = pu(p);
+    const rowTotal = unitTotal * qty;
+    if(!byCap[p.cap]) byCap[p.cap] = 0;
+    byCap[p.cap] += rowTotal;
+    totalDirecto += rowTotal;
+
+    const parts = getBudgetCostParts(p);
+    tipos.mat += parts.mat * qty;
+    tipos.mo += parts.mo * qty;
+    tipos.eq += parts.eq * qty;
+    tipos.sub += parts.sub * qty;
+  });
+
+  const typeTotal = tipos.mat + tipos.mo + tipos.eq + tipos.sub;
+  const diff = Math.round(totalDirecto - typeTotal);
+  if(diff){
+    const order = ['mat', 'mo', 'eq', 'sub'].sort((a,b)=>tipos[b] - tipos[a]);
+    const target = order.find(key=>tipos[key] > 0) || 'mat';
+    tipos[target] += diff;
+  }
+
+  return {
+    byCap,
+    tipos,
+    totalDirecto: Math.round(totalDirecto),
+  };
+}
+
 function nextManualBudgetCode(capId){
   const cap = String(capId || '01').padStart(2, '0');
   const used = new Set(getPresupuestoResolvedItems().map(({p})=>String(p.cod || '').toLowerCase()));

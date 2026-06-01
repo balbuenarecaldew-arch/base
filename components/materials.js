@@ -349,6 +349,29 @@ function limpiarBusquedaMateriales(){
   renderMateriales(true);
 }
 
+function formatMaterialSheetRange(ws, range, format){
+  if(!XLSX?.utils?.decode_range) return;
+  const ref = XLSX.utils.decode_range(range);
+  for(let r = ref.s.r; r <= ref.e.r; r++){
+    for(let c = ref.s.c; c <= ref.e.c; c++){
+      const cell = ws[XLSX.utils.encode_cell({ r, c })];
+      if(cell && cell.t === 'n') cell.z = format;
+    }
+  }
+}
+
+function layoutMaterialSheet(ws, options = {}){
+  ws['!margins'] = { left: 0.35, right: 0.35, top: 0.55, bottom: 0.55, header: 0.2, footer: 0.2 };
+  if(options.filter) ws['!autofilter'] = { ref: options.filter };
+  if(options.freezeRows) ws['!views'] = [{ state: 'frozen', ySplit: options.freezeRows }];
+  if(options.rowHeights){
+    ws['!rows'] = ws['!rows'] || [];
+    Object.entries(options.rowHeights).forEach(([idx, hpt])=>{
+      ws['!rows'][Number(idx)] = { hpt };
+    });
+  }
+}
+
 function appendMaterialesSheets(wb){
   const data = buildMaterialesPresupuesto();
   const info = [
@@ -377,7 +400,19 @@ function appendMaterialesSheets(wb){
       Math.round(item.total),
     ]),
   ];
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(detalle), 'Detalle Materiales');
+  const wsDetalle = XLSX.utils.aoa_to_sheet(detalle);
+  wsDetalle['!cols'] = [
+    {wch:34},{wch:13},{wch:48},{wch:10},{wch:13},{wch:44},
+    {wch:12},{wch:14},{wch:16},{wch:16},{wch:18},
+  ];
+  if(detalle.length > info.length + 1){
+    const last = detalle.length;
+    formatMaterialSheetRange(wsDetalle, `E8:E${last}`, '#,##0.000');
+    formatMaterialSheetRange(wsDetalle, `H8:I${last}`, '#,##0.000');
+    formatMaterialSheetRange(wsDetalle, `J8:K${last}`, '#,##0');
+    layoutMaterialSheet(wsDetalle, { filter: `A7:K${last}`, freezeRows: 7, rowHeights: { 0: 24 } });
+  }
+  XLSX.utils.book_append_sheet(wb, wsDetalle, 'Detalle Materiales');
 
   const consolidado = [
     ...info,
@@ -396,7 +431,15 @@ function appendMaterialesSheets(wb){
     ['MATERIAL DIRECTO SIN APU', '', '', '', data.totalSinApu, '', ''],
     ['TOTAL GENERAL MATERIALES', '', '', '', data.totalGeneral, '', ''],
   ];
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(consolidado), 'Total Materiales');
+  const wsConsolidado = XLSX.utils.aoa_to_sheet(consolidado);
+  wsConsolidado['!cols'] = [{wch:50},{wch:12},{wch:18},{wch:16},{wch:18},{wch:12},{wch:12}];
+  if(consolidado.length > info.length + 1){
+    const last = consolidado.length;
+    formatMaterialSheetRange(wsConsolidado, `C8:C${last}`, '#,##0.000');
+    formatMaterialSheetRange(wsConsolidado, `D8:E${last}`, '#,##0');
+    layoutMaterialSheet(wsConsolidado, { filter: `A7:G${Math.max(7, data.consolidado.length + 7)}`, freezeRows: 7, rowHeights: { 0: 24 } });
+  }
+  XLSX.utils.book_append_sheet(wb, wsConsolidado, 'Total Materiales');
 
   if(data.sinApu.length){
     const pendientes = [
@@ -411,7 +454,12 @@ function appendMaterialesSheets(wb){
         item.totalDirecto,
       ]),
     ];
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(pendientes), 'Material Sin APU');
+    const wsPendientes = XLSX.utils.aoa_to_sheet(pendientes);
+    wsPendientes['!cols'] = [{wch:34},{wch:13},{wch:54},{wch:10},{wch:14},{wch:20}];
+    const last = pendientes.length;
+    formatMaterialSheetRange(wsPendientes, `E8:F${last}`, '#,##0');
+    layoutMaterialSheet(wsPendientes, { filter: `A7:F${last}`, freezeRows: 7, rowHeights: { 0: 24 } });
+    XLSX.utils.book_append_sheet(wb, wsPendientes, 'Material Sin APU');
   }
 
   return data;

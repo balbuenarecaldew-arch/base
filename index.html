@@ -126,14 +126,24 @@
   <!-- â•â• DASHBOARD â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• -->
   <section class="view active" id="tab-dashboard" aria-labelledby="heading-dashboard">
     <div class="stat-cards" id="dash-stats"></div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+    <div class="dashboard-grid">
       <div class="card">
         <div class="card-header"><h2 id="heading-dashboard">Distribución por Capítulo</h2></div>
-        <div class="card-body"><div class="chart-wrap"><canvas id="chart-caps"></canvas></div></div>
+        <div class="card-body"><div class="chart-wrap" id="chart-caps-host"><canvas id="chart-caps"></canvas></div></div>
       </div>
       <div class="card">
         <div class="card-header"><h2>Distribución por Tipo de Costo</h2></div>
-        <div class="card-body"><div class="chart-wrap"><canvas id="chart-tipos"></canvas></div></div>
+        <div class="card-body"><div class="chart-wrap" id="chart-tipos-host"><canvas id="chart-tipos"></canvas></div></div>
+      </div>
+    </div>
+    <div class="dashboard-grid dashboard-grid-secondary">
+      <div class="card">
+        <div class="card-header"><h2>Lectura rápida</h2></div>
+        <div class="card-body" id="dash-insights"></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><h2>Rubros principales</h2></div>
+        <div class="card-body" id="dash-top-rubros"></div>
       </div>
     </div>
     <div class="card">

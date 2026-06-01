@@ -19,24 +19,14 @@ function recalcResumen(){
   document.getElementById('r-iva').textContent = fmt(ivaV);
   document.getElementById('r-total').textContent = fmt(total);
 
-  const dbById = typeof getPartidasPresupuestoMap === 'function'
-    ? getPartidasPresupuestoMap()
-    : new Map(DB.map(p=>[p.id, p]));
-  const byCap = {};
-  let matT = 0;
-  let moT = 0;
-  let eqT = 0;
-  let subT = 0;
-  PRESUPUESTO.forEach(it => {
-    const p = dbById.get(it.pid);
-    if(!p) return;
-    if(!byCap[p.cap]) byCap[p.cap] = 0;
-    byCap[p.cap] += pu(p) * it.qty;
-    matT += (p.mat || 0) * it.qty;
-    moT += (p.mo || 0) * it.qty;
-    eqT += (p.eq || 0) * it.qty;
-    subT += (p.sub || 0) * it.qty;
-  });
+  const breakdown = typeof getBudgetCostBreakdown === 'function'
+    ? getBudgetCostBreakdown()
+    : { byCap: {}, tipos: { mat: 0, mo: 0, eq: 0, sub: 0 } };
+  const byCap = breakdown.byCap;
+  const matT = breakdown.tipos.mat;
+  const moT = breakdown.tipos.mo;
+  const eqT = breakdown.tipos.eq;
+  const subT = breakdown.tipos.sub;
 
   let cHtml = '';
   if(!Object.keys(byCap).length){
