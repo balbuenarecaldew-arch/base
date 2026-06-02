@@ -473,6 +473,75 @@ select option{background:var(--bg2);color:var(--txt)}
 }
 .materials-note.warning{border-color:rgba(232,144,32,.35);background:rgba(232,144,32,.1);color:#ffcf8a}
 .materials-note.ok{border-color:rgba(94,200,255,.25);background:rgba(94,200,255,.08);color:var(--acento)}
+.material-matrix-wrap{max-height:560px;border-top:1px solid var(--borde);position:relative}
+.material-matrix-table{border-collapse:separate;border-spacing:0}
+.material-matrix-table th,
+.material-matrix-table td{
+  border-right:1px solid rgba(255,255,255,.09);
+  border-bottom:1px solid rgba(255,255,255,.09);
+  padding:10px 12px;
+  font-size:12px;
+  background:#0b141d
+}
+.material-matrix-table th{
+  background:#101923;
+  vertical-align:bottom;
+  white-space:normal;
+  line-height:1.25
+}
+.material-matrix-table .cell-description{
+  font-size:13px;
+  line-height:1.25
+}
+.matrix-sticky{position:sticky;z-index:8}
+.matrix-material-col{
+  left:0;
+  width:270px;
+  min-width:270px;
+  max-width:270px
+}
+.matrix-unit-col{
+  left:270px;
+  width:68px;
+  min-width:68px;
+  max-width:68px;
+  text-align:center
+}
+th.matrix-sticky{z-index:14}
+td.matrix-sticky{background:#0b141d}
+tr:hover td.matrix-sticky{background:#101923}
+.matrix-rubro-col{
+  min-width:148px;
+  max-width:180px;
+  text-align:center
+}
+.matrix-rubro-code{
+  font-family:'IBM Plex Mono',monospace;
+  color:var(--acento);
+  font-size:11px;
+  font-weight:800;
+  margin-bottom:4px
+}
+.matrix-rubro-desc{
+  color:#c8d7e3;
+  font-size:10px;
+  font-weight:700;
+  text-transform:none;
+  letter-spacing:0
+}
+.matrix-qty-cell{
+  min-width:120px;
+  color:#f4f8fb;
+  background:#0e1822!important
+}
+.matrix-empty-cell{background:#081018!important}
+.matrix-total-col,
+.matrix-total-cell{
+  min-width:140px;
+  background:rgba(94,200,255,.1)!important;
+  color:var(--acento)!important;
+  font-weight:900
+}
 
 /* â•â•â• PRINT DESIGNER â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 .print-seccion{

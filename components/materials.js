@@ -244,6 +244,7 @@ function renderMateriales(force = false){
   renderMaterialesAlert(data);
   renderMaterialesCapitulos(data.porCapitulo);
   renderMaterialesConsolidado(consolidadoFiltrado, q);
+  renderMaterialesMatriz(data, q);
   renderMaterialesDetalle(detalleFiltrado, q);
 }
 
@@ -306,6 +307,73 @@ function renderMaterialesConsolidado(consolidado, q){
       <td class="num">${fmtN(item.partidasCount)}</td>
     </tr>
   `).join('');
+}
+
+function renderMaterialesMatriz(data, q){
+  const host = document.getElementById('mat-matriz');
+  if(!host) return;
+
+  const matrix = buildMaterialesMatrix(data);
+  if(!matrix.materiales.length || !matrix.rubros.length){
+    host.innerHTML = '<div class="empty-state" style="padding:44px 0"><h3>Sin cuadro</h3><p>No hay materiales detallados en APU para cruzar con rubros.</p></div>';
+    return;
+  }
+
+  const rubroMatches = new Set();
+  if(q){
+    matrix.rubros.forEach(rubro=>{
+      const text = materialTextKey(`${rubro.cod} ${rubro.desc} ${rubro.capId} ${rubro.capName}`);
+      if(text.includes(q)) rubroMatches.add(rubro.key);
+    });
+  }
+
+  const materiales = q
+    ? matrix.materiales.filter(material=>{
+        const materialMatch = materialTextKey(`${material.material} ${material.u}`).includes(q);
+        if(materialMatch) return true;
+        return matrix.rubros.some(rubro=>rubroMatches.has(rubro.key) && (matrix.qtyMap.get(`${material.key}::${rubro.key}`) || 0));
+      })
+    : matrix.materiales;
+
+  if(!materiales.length){
+    host.innerHTML = '<div class="empty-state" style="padding:44px 0"><h3>Sin resultados</h3><p>No hay insumos o rubros que coincidan con la busqueda.</p></div>';
+    return;
+  }
+
+  const minWidth = Math.max(980, 420 + matrix.rubros.length * 160);
+  host.innerHTML = `
+    <table class="data-table material-matrix-table" style="min-width:${minWidth}px">
+      <thead>
+        <tr>
+          <th class="matrix-sticky matrix-material-col">Material / Insumo</th>
+          <th class="matrix-sticky matrix-unit-col">Ud.</th>
+          ${matrix.rubros.map(rubro=>`
+            <th class="matrix-rubro-col" title="${materialEscape(`${rubro.cod} - ${rubro.desc}`)}">
+              <div class="matrix-rubro-code">${materialEscape(rubro.cod)}</div>
+              <div class="matrix-rubro-desc">${materialEscape(rubro.desc)}</div>
+            </th>
+          `).join('')}
+          <th class="num matrix-total-col">Cantidad total</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${materiales.map(material=>{
+          const qtyCells = matrix.rubros.map(rubro=>{
+            const qty = matrix.qtyMap.get(`${material.key}::${rubro.key}`) || 0;
+            return `<td class="num matrix-qty-cell ${qty ? '' : 'matrix-empty-cell'}">${qty ? formatMaterialQty(qty) : ''}</td>`;
+          }).join('');
+          return `
+            <tr>
+              <td class="matrix-sticky matrix-material-col"><div class="cell-description">${materialEscape(material.material)}</div></td>
+              <td class="matrix-sticky matrix-unit-col cell-unit">${materialEscape(material.u)}</td>
+              ${qtyCells}
+              <td class="num matrix-total-cell">${formatMaterialQty(material.totalQty)}</td>
+            </tr>
+          `;
+        }).join('')}
+      </tbody>
+    </table>
+  `;
 }
 
 function renderMaterialesDetalle(detalle, q){
@@ -476,7 +544,7 @@ function appendPedidoMaterialesMatrixSheet(wb, data){
   if(!matrix.materiales.length || !matrix.rubros.length) return false;
 
   const firstRubroCol = 2;
-  const info = getMaterialesExportInfo('PEDIDO DE MATERIALES - MATRIZ DE CANTIDADES');
+  const info = getMaterialesExportInfo('CUADRO DE MATERIALES POR RUBRO');
   const headerRow = info.length;
   const firstDataRow = headerRow + 1;
   const lastDataRow = firstDataRow + matrix.materiales.length - 1;
@@ -518,7 +586,7 @@ function appendPedidoMaterialesMatrixSheet(wb, data){
     freezeCols: 2,
     rowHeights: { 0: 24, [headerRow]: 42 },
   });
-  XLSX.utils.book_append_sheet(wb, ws, 'Pedido Materiales');
+  XLSX.utils.book_append_sheet(wb, ws, 'Cuadro Materiales');
   return true;
 }
 
