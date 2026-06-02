@@ -475,74 +475,48 @@ function appendPedidoMaterialesMatrixSheet(wb, data){
   const matrix = buildMaterialesMatrix(data);
   if(!matrix.materiales.length || !matrix.rubros.length) return false;
 
-  const firstRubroCol = 4;
+  const firstRubroCol = 2;
   const info = getMaterialesExportInfo('PEDIDO DE MATERIALES - MATRIZ DE CANTIDADES');
   const headerRow = info.length;
   const firstDataRow = headerRow + 1;
   const lastDataRow = firstDataRow + matrix.materiales.length - 1;
   const lastRubroCol = firstRubroCol + matrix.rubros.length - 1;
-  const lastCol = materialExcelCol(lastRubroCol);
+  const totalCol = lastRubroCol + 1;
+  const firstRubroColName = materialExcelCol(firstRubroCol);
+  const lastRubroColName = materialExcelCol(lastRubroCol);
+  const totalColName = materialExcelCol(totalCol);
 
   const rows = [
     ...info,
-    ['Material / Insumo', 'Suma total', 'Ud.', 'Precio ref. Gs.', ...matrix.rubros.map(r=>`${r.cod} ${r.desc}`)],
+    ['Material / Insumo', 'Ud.', ...matrix.rubros.map(r=>`${r.cod} ${r.desc}`), 'Cantidad total'],
     ...matrix.materiales.map(material=>[
       material.material,
-      material.totalQty,
       material.u,
-      material.puPromedio || material.pu,
       ...matrix.rubros.map(r=>materialQtyValue(matrix.qtyMap.get(`${material.key}::${r.key}`) || 0) || null),
+      material.totalQty,
     ]),
-    [],
-    ['TOTAL Gs. POR RUBRO', '', '', 'Costo estimado', ...matrix.rubros.map(()=>0)],
-    ['TOTAL GENERAL Gs.', Math.round(data.totalDetallado), '', '', ...matrix.rubros.map(()=>null)],
   ];
 
-  const totalCostRow = firstDataRow + matrix.materiales.length + 1;
-  const totalGeneralRow = totalCostRow + 1;
   const ws = XLSX.utils.aoa_to_sheet(rows);
 
   matrix.materiales.forEach((material, idx)=>{
     const rowIndex = firstDataRow + idx;
     const excelRow = rowIndex + 1;
-    setMaterialFormulaCell(ws, rowIndex, 1, `SUM(E${excelRow}:${lastCol}${excelRow})`, material.totalQty);
+    setMaterialFormulaCell(ws, rowIndex, totalCol, `SUM(${firstRubroColName}${excelRow}:${lastRubroColName}${excelRow})`, material.totalQty);
   });
-
-  matrix.rubros.forEach((rubro, idx)=>{
-    const colIndex = firstRubroCol + idx;
-    const col = materialExcelCol(colIndex);
-    const value = matrix.materiales.reduce((acc, material)=>{
-      const qty = matrix.qtyMap.get(`${material.key}::${rubro.key}`) || 0;
-      return acc + qty * (material.puPromedio || material.pu || 0);
-    }, 0);
-    setMaterialFormulaCell(
-      ws,
-      totalCostRow,
-      colIndex,
-      `SUMPRODUCT(${col}${firstDataRow + 1}:${col}${lastDataRow + 1},$D$${firstDataRow + 1}:$D$${lastDataRow + 1})`,
-      Math.round(value)
-    );
-  });
-
-  setMaterialFormulaCell(ws, totalGeneralRow, 1, `SUM(E${totalCostRow + 1}:${lastCol}${totalCostRow + 1})`, Math.round(data.totalDetallado));
 
   ws['!cols'] = [
     {wch:44},
-    {wch:14},
     {wch:10},
-    {wch:16},
     ...matrix.rubros.map(()=>({wch:18})),
+    {wch:16},
   ];
-  formatMaterialSheetRange(ws, `B${firstDataRow + 1}:B${lastDataRow + 1}`, '#,##0.000');
-  formatMaterialSheetRange(ws, `D${firstDataRow + 1}:D${lastDataRow + 1}`, '#,##0');
-  formatMaterialSheetRange(ws, `E${firstDataRow + 1}:${lastCol}${lastDataRow + 1}`, '#,##0.000');
-  formatMaterialSheetRange(ws, `E${totalCostRow + 1}:${lastCol}${totalCostRow + 1}`, '#,##0');
-  formatMaterialSheetRange(ws, `B${totalGeneralRow + 1}:B${totalGeneralRow + 1}`, '#,##0');
+  formatMaterialSheetRange(ws, `${firstRubroColName}${firstDataRow + 1}:${totalColName}${lastDataRow + 1}`, '#,##0.000');
   layoutMaterialSheet(ws, {
-    filter: `A${headerRow + 1}:${lastCol}${lastDataRow + 1}`,
+    filter: `A${headerRow + 1}:${totalColName}${lastDataRow + 1}`,
     freezeRows: headerRow + 1,
-    freezeCols: 4,
-    rowHeights: { 0: 24, [headerRow]: 42, [totalCostRow]: 22, [totalGeneralRow]: 22 },
+    freezeCols: 2,
+    rowHeights: { 0: 24, [headerRow]: 42 },
   });
   XLSX.utils.book_append_sheet(wb, ws, 'Pedido Materiales');
   return true;
@@ -639,7 +613,6 @@ function appendMaterialesSheets(wb){
   const info = getMaterialesExportInfo('PLANILLA DETALLADA DE MATERIALES');
 
   appendPedidoMaterialesMatrixSheet(wb, data);
-  appendRubroInsumoMatrixSheet(wb, data);
 
   const detalle = [
     ...info,
