@@ -646,6 +646,7 @@ function appendPresupuestoProfesionalSheets(wb){
   appendResumenPresupuestoSheet(wb, data);
   appendAnalisisCostosSheet(wb, data);
   appendPresupuestoSheet(wb, data);
+  if(typeof appendMaterialesSheets === 'function') appendMaterialesSheets(wb);
   appendApuPresupuestoSheet(wb, data);
   return data;
 }

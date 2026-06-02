@@ -90,7 +90,7 @@ function buildMaterialesPresupuesto(){
         p: new Map((DB || []).map(partida=>[partida.id, partida])).get(item.pid),
       })).filter(entry=>entry.p);
 
-  items.forEach(({ item, p: partida })=>{
+  items.forEach(({ item, p: partida }, itemIndex)=>{
     if(!partida) return;
 
     const cap = capOf(partida.cap);
@@ -130,6 +130,9 @@ function buildMaterialesPresupuesto(){
       const cantidadTotal = qtyPorRubro * qtyRubro;
       const total = cantidadTotal * material.pu;
       const line = {
+        itemIndex,
+        itemNo: itemIndex + 1,
+        budgetPid: item.pid,
         capId: partida.cap,
         capName: cap.name,
         capColor: cap.color,
@@ -363,7 +366,12 @@ function formatMaterialSheetRange(ws, range, format){
 function layoutMaterialSheet(ws, options = {}){
   ws['!margins'] = { left: 0.35, right: 0.35, top: 0.55, bottom: 0.55, header: 0.2, footer: 0.2 };
   if(options.filter) ws['!autofilter'] = { ref: options.filter };
-  if(options.freezeRows) ws['!views'] = [{ state: 'frozen', ySplit: options.freezeRows }];
+  if(options.freezeRows || options.freezeCols){
+    const view = { state: 'frozen' };
+    if(options.freezeRows) view.ySplit = options.freezeRows;
+    if(options.freezeCols) view.xSplit = options.freezeCols;
+    ws['!views'] = [view];
+  }
   if(options.rowHeights){
     ws['!rows'] = ws['!rows'] || [];
     Object.entries(options.rowHeights).forEach(([idx, hpt])=>{
@@ -372,16 +380,266 @@ function layoutMaterialSheet(ws, options = {}){
   }
 }
 
-function appendMaterialesSheets(wb){
-  const data = buildMaterialesPresupuesto();
-  const info = [
-    ['PLANILLA DETALLADA DE MATERIALES'],
+function getMaterialesExportInfo(title){
+  return [
+    [title],
     ['Proyecto', document.getElementById('p-nombre')?.value || ''],
     ['Cliente', document.getElementById('p-cliente')?.value || ''],
     ['Nro. Presupuesto', document.getElementById('p-nro')?.value || ''],
     ['Fecha', document.getElementById('p-fecha')?.value || ''],
     [],
   ];
+}
+
+function materialExcelCol(colIndex){
+  if(XLSX?.utils?.encode_col) return XLSX.utils.encode_col(colIndex);
+  let col = '';
+  let n = colIndex + 1;
+  while(n > 0){
+    const mod = (n - 1) % 26;
+    col = String.fromCharCode(65 + mod) + col;
+    n = Math.floor((n - mod) / 26);
+  }
+  return col;
+}
+
+function setMaterialFormulaCell(ws, rowIndex, colIndex, formula, value = 0){
+  const addr = XLSX.utils.encode_cell({ r: rowIndex, c: colIndex });
+  ws[addr] = { t: 'n', f: formula, v: value };
+}
+
+function materialQtyValue(value){
+  const n = parseFloat(value) || 0;
+  return Math.round(n * 1000000) / 1000000;
+}
+
+function buildMaterialesMatrix(data){
+  const rubrosMap = new Map();
+  const materialesMap = new Map();
+  const qtyMap = new Map();
+
+  data.detalle.forEach(line=>{
+    const rubroKey = `${line.itemIndex ?? ''}|${line.capId}|${line.cod}|${line.desc}`;
+    if(!rubrosMap.has(rubroKey)){
+      rubrosMap.set(rubroKey, {
+        key: rubroKey,
+        itemNo: line.itemNo || rubrosMap.size + 1,
+        capId: line.capId,
+        capName: line.capName,
+        cod: line.cod,
+        desc: line.desc,
+        u: line.uRubro,
+        qtyRubro: line.qtyRubro,
+      });
+    }
+
+    const materialKey = `${line.resourceId || materialTextKey(line.material)}|${materialTextKey(line.uMaterial)}`;
+    if(!materialesMap.has(materialKey)){
+      materialesMap.set(materialKey, {
+        key: materialKey,
+        material: line.material,
+        u: line.uMaterial,
+        pu: Math.round(parseFloat(line.pu) || 0),
+        totalQty: 0,
+        totalCost: 0,
+      });
+    }
+    const material = materialesMap.get(materialKey);
+    material.totalQty += parseFloat(line.cantidadTotal) || 0;
+    material.totalCost += parseFloat(line.total) || 0;
+    if(!material.pu && line.pu) material.pu = Math.round(parseFloat(line.pu) || 0);
+
+    const matrixKey = `${materialKey}::${rubroKey}`;
+    qtyMap.set(matrixKey, (qtyMap.get(matrixKey) || 0) + (parseFloat(line.cantidadTotal) || 0));
+  });
+
+  const rubros = Array.from(rubrosMap.values())
+    .sort((a,b)=>
+      String(a.capId).localeCompare(String(b.capId), 'es', { numeric: true }) ||
+      String(a.cod).localeCompare(String(b.cod), 'es', { numeric: true }) ||
+      a.itemNo - b.itemNo
+    );
+  const materiales = Array.from(materialesMap.values())
+    .map(item=>({
+      ...item,
+      totalQty: materialQtyValue(item.totalQty),
+      totalCost: Math.round(item.totalCost),
+      puPromedio: item.totalQty ? Math.round(item.totalCost / item.totalQty) : item.pu,
+    }))
+    .sort((a,b)=>b.totalCost - a.totalCost || a.material.localeCompare(b.material, 'es', { numeric: true }));
+
+  return { rubros, materiales, qtyMap };
+}
+
+function appendPedidoMaterialesMatrixSheet(wb, data){
+  const matrix = buildMaterialesMatrix(data);
+  if(!matrix.materiales.length || !matrix.rubros.length) return false;
+
+  const firstRubroCol = 4;
+  const info = getMaterialesExportInfo('PEDIDO DE MATERIALES - MATRIZ DE CANTIDADES');
+  const headerRow = info.length;
+  const firstDataRow = headerRow + 1;
+  const lastDataRow = firstDataRow + matrix.materiales.length - 1;
+  const lastRubroCol = firstRubroCol + matrix.rubros.length - 1;
+  const lastCol = materialExcelCol(lastRubroCol);
+
+  const rows = [
+    ...info,
+    ['Material / Insumo', 'Suma total', 'Ud.', 'Precio ref. Gs.', ...matrix.rubros.map(r=>`${r.cod} ${r.desc}`)],
+    ...matrix.materiales.map(material=>[
+      material.material,
+      material.totalQty,
+      material.u,
+      material.puPromedio || material.pu,
+      ...matrix.rubros.map(r=>materialQtyValue(matrix.qtyMap.get(`${material.key}::${r.key}`) || 0) || null),
+    ]),
+    [],
+    ['TOTAL Gs. POR RUBRO', '', '', 'Costo estimado', ...matrix.rubros.map(()=>0)],
+    ['TOTAL GENERAL Gs.', Math.round(data.totalDetallado), '', '', ...matrix.rubros.map(()=>null)],
+  ];
+
+  const totalCostRow = firstDataRow + matrix.materiales.length + 1;
+  const totalGeneralRow = totalCostRow + 1;
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+
+  matrix.materiales.forEach((material, idx)=>{
+    const rowIndex = firstDataRow + idx;
+    const excelRow = rowIndex + 1;
+    setMaterialFormulaCell(ws, rowIndex, 1, `SUM(E${excelRow}:${lastCol}${excelRow})`, material.totalQty);
+  });
+
+  matrix.rubros.forEach((rubro, idx)=>{
+    const colIndex = firstRubroCol + idx;
+    const col = materialExcelCol(colIndex);
+    const value = matrix.materiales.reduce((acc, material)=>{
+      const qty = matrix.qtyMap.get(`${material.key}::${rubro.key}`) || 0;
+      return acc + qty * (material.puPromedio || material.pu || 0);
+    }, 0);
+    setMaterialFormulaCell(
+      ws,
+      totalCostRow,
+      colIndex,
+      `SUMPRODUCT(${col}${firstDataRow + 1}:${col}${lastDataRow + 1},$D$${firstDataRow + 1}:$D$${lastDataRow + 1})`,
+      Math.round(value)
+    );
+  });
+
+  setMaterialFormulaCell(ws, totalGeneralRow, 1, `SUM(E${totalCostRow + 1}:${lastCol}${totalCostRow + 1})`, Math.round(data.totalDetallado));
+
+  ws['!cols'] = [
+    {wch:44},
+    {wch:14},
+    {wch:10},
+    {wch:16},
+    ...matrix.rubros.map(()=>({wch:18})),
+  ];
+  formatMaterialSheetRange(ws, `B${firstDataRow + 1}:B${lastDataRow + 1}`, '#,##0.000');
+  formatMaterialSheetRange(ws, `D${firstDataRow + 1}:D${lastDataRow + 1}`, '#,##0');
+  formatMaterialSheetRange(ws, `E${firstDataRow + 1}:${lastCol}${lastDataRow + 1}`, '#,##0.000');
+  formatMaterialSheetRange(ws, `E${totalCostRow + 1}:${lastCol}${totalCostRow + 1}`, '#,##0');
+  formatMaterialSheetRange(ws, `B${totalGeneralRow + 1}:B${totalGeneralRow + 1}`, '#,##0');
+  layoutMaterialSheet(ws, {
+    filter: `A${headerRow + 1}:${lastCol}${lastDataRow + 1}`,
+    freezeRows: headerRow + 1,
+    freezeCols: 4,
+    rowHeights: { 0: 24, [headerRow]: 42, [totalCostRow]: 22, [totalGeneralRow]: 22 },
+  });
+  XLSX.utils.book_append_sheet(wb, ws, 'Pedido Materiales');
+  return true;
+}
+
+function appendRubroInsumoMatrixSheet(wb, data){
+  const matrix = buildMaterialesMatrix(data);
+  if(!matrix.materiales.length || !matrix.rubros.length) return false;
+
+  const firstMaterialCol = 7;
+  const info = getMaterialesExportInfo('MATRIZ RUBRO x INSUMO - CANTIDADES');
+  const unitRow = info.length;
+  const priceRow = unitRow + 1;
+  const headerRow = priceRow + 1;
+  const firstDataRow = headerRow + 1;
+  const lastDataRow = firstDataRow + matrix.rubros.length - 1;
+  const totalRow = lastDataRow + 1;
+  const lastMaterialCol = firstMaterialCol + matrix.materiales.length - 1;
+  const lastCol = materialExcelCol(lastMaterialCol);
+
+  const rows = [
+    ...info,
+    ['', '', '', '', '', '', 'Unidad', ...matrix.materiales.map(material=>material.u)],
+    ['', '', '', '', '', '', 'Precio ref. Gs.', ...matrix.materiales.map(material=>material.puPromedio || material.pu)],
+    ['Item', 'Capitulo', 'Codigo', 'Rubro', 'Ud.', 'Cant. rubro', 'Total materiales Gs.', ...matrix.materiales.map(material=>material.material)],
+    ...matrix.rubros.map(rubro=>[
+      rubro.itemNo,
+      `${rubro.capId} - ${rubro.capName}`,
+      rubro.cod,
+      rubro.desc,
+      rubro.u,
+      rubro.qtyRubro,
+      0,
+      ...matrix.materiales.map(material=>materialQtyValue(matrix.qtyMap.get(`${material.key}::${rubro.key}`) || 0) || null),
+    ]),
+    ['TOTAL', '', '', 'TOTAL CANTIDADES', '', '', 0, ...matrix.materiales.map(()=>0)],
+  ];
+
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  matrix.rubros.forEach((rubro, idx)=>{
+    const rowIndex = firstDataRow + idx;
+    const excelRow = rowIndex + 1;
+    const value = matrix.materiales.reduce((acc, material)=>{
+      const qty = matrix.qtyMap.get(`${material.key}::${rubro.key}`) || 0;
+      return acc + qty * (material.puPromedio || material.pu || 0);
+    }, 0);
+    setMaterialFormulaCell(
+      ws,
+      rowIndex,
+      6,
+      `SUMPRODUCT(H${excelRow}:${lastCol}${excelRow},$H$${priceRow + 1}:$${lastCol}$${priceRow + 1})`,
+      Math.round(value)
+    );
+  });
+
+  matrix.materiales.forEach((material, idx)=>{
+    const colIndex = firstMaterialCol + idx;
+    const col = materialExcelCol(colIndex);
+    setMaterialFormulaCell(
+      ws,
+      totalRow,
+      colIndex,
+      `SUM(${col}${firstDataRow + 1}:${col}${lastDataRow + 1})`,
+      material.totalQty
+    );
+  });
+  setMaterialFormulaCell(ws, totalRow, 6, `SUM(G${firstDataRow + 1}:G${lastDataRow + 1})`, Math.round(data.totalDetallado));
+
+  ws['!cols'] = [
+    {wch:8},
+    {wch:30},
+    {wch:13},
+    {wch:48},
+    {wch:9},
+    {wch:12},
+    {wch:18},
+    ...matrix.materiales.map(()=>({wch:18})),
+  ];
+  formatMaterialSheetRange(ws, `F${firstDataRow + 1}:G${totalRow + 1}`, '#,##0');
+  formatMaterialSheetRange(ws, `H${priceRow + 1}:${lastCol}${priceRow + 1}`, '#,##0');
+  formatMaterialSheetRange(ws, `H${firstDataRow + 1}:${lastCol}${totalRow + 1}`, '#,##0.000');
+  layoutMaterialSheet(ws, {
+    filter: `A${headerRow + 1}:${lastCol}${lastDataRow + 1}`,
+    freezeRows: headerRow + 1,
+    freezeCols: 7,
+    rowHeights: { 0: 24, [headerRow]: 42, [totalRow]: 22 },
+  });
+  XLSX.utils.book_append_sheet(wb, ws, 'Rubro x Insumo');
+  return true;
+}
+
+function appendMaterialesSheets(wb){
+  const data = buildMaterialesPresupuesto();
+  const info = getMaterialesExportInfo('PLANILLA DETALLADA DE MATERIALES');
+
+  appendPedidoMaterialesMatrixSheet(wb, data);
+  appendRubroInsumoMatrixSheet(wb, data);
 
   const detalle = [
     ...info,
