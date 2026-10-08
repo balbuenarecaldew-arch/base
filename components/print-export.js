@@ -170,14 +170,81 @@
 function generarPreview(){
   document.getElementById('preview-doc').innerHTML = generarDocHTML() || '<p style="color:#999;text-align:center;padding:40px 0">Agrega partidas al presupuesto para ver la vista previa.</p>';
 }
+function getPrintDocumentHTML(content){
+  return `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Presupuesto de Obra</title>
+<style>
+  @page{margin:1.5cm;size:A4}
+  *{box-sizing:border-box}
+  body{margin:0;background:#fff;color:#111;font-family:Arial,sans-serif;font-size:9.5pt;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  p,h1,h2,h3{margin-top:0}
+  table{width:100%;border-collapse:collapse}
+  .doc-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px;padding-bottom:12px;border-bottom:2px solid #1D9E75}
+  .doc-empresa h2{font-size:15pt;font-weight:700;color:#1B4432;margin-bottom:3px}
+  .doc-empresa p{font-size:8.5pt;color:#555;margin:0 0 2px}
+  .doc-datos{text-align:right;font-size:8.5pt;color:#333}
+  .doc-datos p{margin:0 0 3px}
+  .doc-datos strong{color:#1B4432}
+  .doc-titulo{text-align:center;font-size:13pt;font-weight:700;color:#1B4432;margin:12px 0 3px;text-transform:uppercase;letter-spacing:.04em}
+  .doc-subtitulo{text-align:center;font-size:8.5pt;color:#555;margin-bottom:14px}
+  .doc-table{border-collapse:collapse;width:100%}
+  .doc-table td{color:#111!important;background:#fff!important;border-bottom:1px solid #e8e8e8;font-size:9pt;padding:5px 8px}
+  .doc-table tr:nth-child(even) td{background:#fafafa!important;color:#111!important}
+  .doc-table th{color:#1B4432!important;background:#f0f7f3!important;font-weight:700;border-bottom:2px solid #1B4432;font-size:8.5pt;text-transform:uppercase;letter-spacing:.04em;padding:6px 8px}
+  .doc-cap-row td{background:#e8f4ef!important;color:#1B4432!important;font-weight:700;border-left:3px solid #1B4432;border-bottom:1px solid #c5ddd4!important}
+  .doc-firma{display:flex;justify-content:space-around;margin-top:36px}
+  .doc-firma-item{text-align:center;width:190px}
+  .doc-firma-item .linea{border-top:1px solid #333;margin-bottom:5px}
+  .doc-firma-item p{font-size:8.5pt;color:#333;margin:0 0 2px}
+  .doc-nota{font-size:7.5pt;color:#888;margin-top:8px;font-style:italic}
+</style>
+</head>
+<body>${content}</body>
+</html>`;
+}
 function imprimirDocumento(){
   const content = generarDocHTML();
-  document.getElementById('print-output').innerHTML = content;
-  window.onafterprint = () => {
-    document.getElementById('print-output').innerHTML = '';
-    window.onafterprint = null;
+  if(!content.trim()){
+    generarPreview();
+    if(typeof notif === 'function') notif('No hay contenido para imprimir', '#E05555');
+    return;
+  }
+
+  const output = document.getElementById('print-output');
+  if(output) output.innerHTML = '';
+  const oldFrame = document.getElementById('print-frame');
+  if(oldFrame) oldFrame.remove();
+
+  const frame = document.createElement('iframe');
+  frame.id = 'print-frame';
+  frame.style.position = 'fixed';
+  frame.style.right = '0';
+  frame.style.bottom = '0';
+  frame.style.width = '0';
+  frame.style.height = '0';
+  frame.style.border = '0';
+  frame.style.opacity = '0';
+  document.body.appendChild(frame);
+
+  const cleanup = () => {
+    setTimeout(()=>{
+      if(frame.parentNode) frame.remove();
+    }, 500);
   };
-  window.print();
+
+  frame.onload = () => {
+    const printWindow = frame.contentWindow;
+    if(!printWindow) return;
+    printWindow.onafterprint = cleanup;
+    setTimeout(()=>{
+      printWindow.focus();
+      printWindow.print();
+    }, 100);
+  };
+  frame.srcdoc = getPrintDocumentHTML(content);
 }
 
 function getBudgetFactors(){
