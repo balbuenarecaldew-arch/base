@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" role="img" aria-label="PresupuestAPP v3">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" role="img" aria-label="Presupuesto de Obra">
   <defs>
     <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
       <stop offset="0%" stop-color="#0B140F"/>
@@ -16,8 +16,8 @@
   <path d="M126 199V132l34-17 34 17v67" fill="none" stroke="url(#accent)" stroke-linecap="round" stroke-linejoin="round" stroke-width="12"/>
   <path d="M139 168h41" stroke="#E2F0E8" stroke-linecap="round" stroke-width="12"/>
   <path d="M160 147v41" stroke="#E2F0E8" stroke-linecap="round" stroke-width="12"/>
-  <text x="280" y="178" fill="#E2F0E8" font-family="DM Sans, Arial, sans-serif" font-size="72" font-weight="700">PresupuestAPP v3</text>
-  <text x="280" y="252" fill="#8FB09A" font-family="DM Sans, Arial, sans-serif" font-size="34">Base de datos de partidas con APU integrado</text>
+  <text x="280" y="178" fill="#E2F0E8" font-family="DM Sans, Arial, sans-serif" font-size="72" font-weight="700">Presupuesto de Obra</text>
+  <text x="280" y="252" fill="#8FB09A" font-family="DM Sans, Arial, sans-serif" font-size="34">Documento tecnico de presupuesto</text>
   <text x="90" y="410" fill="#E2F0E8" font-family="DM Sans, Arial, sans-serif" font-size="34">Dashboard, presupuesto activo, resumen, impresión, Excel y administración en una sola app.</text>
   <g transform="translate(90 472)">
     <rect width="300" height="94" rx="20" fill="#0F1410" stroke="#2E3D31"/>

@@ -217,14 +217,16 @@ function imprimirDocumento(){
   if(output) output.innerHTML = '';
   const oldFrame = document.getElementById('print-frame');
   if(oldFrame) oldFrame.remove();
+  const previousTitle = document.title;
+  document.title = 'Presupuesto de Obra';
 
   const frame = document.createElement('iframe');
   frame.id = 'print-frame';
   frame.style.position = 'fixed';
   frame.style.right = '0';
   frame.style.bottom = '0';
-  frame.style.width = '0';
-  frame.style.height = '0';
+  frame.style.width = '1px';
+  frame.style.height = '1px';
   frame.style.border = '0';
   frame.style.opacity = '0';
   document.body.appendChild(frame);
@@ -232,6 +234,7 @@ function imprimirDocumento(){
   const cleanup = () => {
     setTimeout(()=>{
       if(frame.parentNode) frame.remove();
+      document.title = previousTitle;
     }, 500);
   };
 
