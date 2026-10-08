@@ -196,7 +196,7 @@ function getPrintDocumentHTML(content){
   .doc-table tr:nth-child(even) td{background:#fafafa!important;color:#111!important}
   .doc-table th{color:#1B4432!important;background:#f0f7f3!important;font-weight:700;border-bottom:2px solid #1B4432;font-size:8.5pt;text-transform:uppercase;letter-spacing:.04em;padding:6px 8px}
   .doc-cap-row td{background:#e8f4ef!important;color:#1B4432!important;font-weight:700;border-left:3px solid #1B4432;border-bottom:1px solid #c5ddd4!important}
-  .doc-firma{display:flex;justify-content:space-around;gap:38px;margin-top:82px;padding-top:34px;min-height:118px;page-break-inside:avoid;break-inside:avoid}
+  .doc-firma{display:flex;justify-content:space-around;gap:38px;margin-top:125px;padding-top:42px;min-height:155px;page-break-inside:avoid;break-inside:avoid}
   .doc-firma-item{text-align:center;width:235px}
   .doc-firma-item .linea{border-top:1px solid #333;margin-bottom:10px}
   .doc-firma-item p{font-size:8.5pt;color:#333;margin:0 0 2px}
