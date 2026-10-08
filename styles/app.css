@@ -715,7 +715,8 @@ tr:hover td.matrix-sticky{background:#101923}
 /* â•â•â• PRINT STYLES â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 @media print{
   body{background:#fff!important;color:#000!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-  .topbar,.tabs,.ramos-bar,.notif,.modal-bg,#login-screen,.view,#offline-banner,#inactivity-warning,#autosave-info{display:none!important}
+  body > *:not(#print-output){display:none!important}
+  #app,.page-footer,.topbar,.tabs,.ramos-bar,.notif,.modal-bg,#login-screen,.view,#offline-banner,#inactivity-warning,#autosave-info{display:none!important}
   #print-output{display:block!important;background:#fff!important}
   @page{margin:1.5cm;size:A4}
   .doc-table th{background:#f0f7f3!important;color:#1B4432!important;border-bottom:2px solid #1B4432!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}

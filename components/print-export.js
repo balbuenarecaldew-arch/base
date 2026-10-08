@@ -173,8 +173,11 @@ function generarPreview(){
 function imprimirDocumento(){
   const content = generarDocHTML();
   document.getElementById('print-output').innerHTML = content;
+  window.onafterprint = () => {
+    document.getElementById('print-output').innerHTML = '';
+    window.onafterprint = null;
+  };
   window.print();
-  setTimeout(()=>document.getElementById('print-output').innerHTML='', 500);
 }
 
 function getBudgetFactors(){
