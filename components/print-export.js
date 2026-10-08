@@ -177,9 +177,10 @@ function getPrintDocumentHTML(content){
 <meta charset="UTF-8">
 <title>Presupuesto de Obra</title>
 <style>
-  @page{margin:1.5cm;size:A4}
+  @page{size:210mm 297mm;margin:12mm}
   *{box-sizing:border-box}
   body{margin:0;background:#fff;color:#111;font-family:Arial,sans-serif;font-size:9.5pt;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .print-sheet{width:100%;min-height:273mm;margin:0 auto;background:#fff}
   p,h1,h2,h3{margin-top:0}
   table{width:100%;border-collapse:collapse}
   .doc-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px;padding-bottom:12px;border-bottom:2px solid #1D9E75}
@@ -195,14 +196,14 @@ function getPrintDocumentHTML(content){
   .doc-table tr:nth-child(even) td{background:#fafafa!important;color:#111!important}
   .doc-table th{color:#1B4432!important;background:#f0f7f3!important;font-weight:700;border-bottom:2px solid #1B4432;font-size:8.5pt;text-transform:uppercase;letter-spacing:.04em;padding:6px 8px}
   .doc-cap-row td{background:#e8f4ef!important;color:#1B4432!important;font-weight:700;border-left:3px solid #1B4432;border-bottom:1px solid #c5ddd4!important}
-  .doc-firma{display:flex;justify-content:space-around;margin-top:36px}
-  .doc-firma-item{text-align:center;width:190px}
-  .doc-firma-item .linea{border-top:1px solid #333;margin-bottom:5px}
+  .doc-firma{display:flex;justify-content:space-around;gap:38px;margin-top:82px;padding-top:34px;min-height:118px;page-break-inside:avoid;break-inside:avoid}
+  .doc-firma-item{text-align:center;width:235px}
+  .doc-firma-item .linea{border-top:1px solid #333;margin-bottom:10px}
   .doc-firma-item p{font-size:8.5pt;color:#333;margin:0 0 2px}
   .doc-nota{font-size:7.5pt;color:#888;margin-top:8px;font-style:italic}
 </style>
 </head>
-<body>${content}</body>
+<body><main class="print-sheet">${content}</main></body>
 </html>`;
 }
 function imprimirDocumento(){

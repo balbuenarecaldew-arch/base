@@ -661,11 +661,22 @@ tr:hover td.matrix-sticky{background:#101923}
 .doc-apu-item{border:1px solid #ddd;border-radius:5px;margin-bottom:12px;overflow:hidden}
 .doc-apu-header{background:#1B4432;color:#fff;padding:6px 10px;font-weight:700;font-size:8.5pt;display:flex;justify-content:space-between}
 .doc-apu-total{background:#1D9E75!important;color:#fff!important;font-weight:700}
-.doc-firma{display:flex;justify-content:space-around;margin-top:36px}
-.doc-firma-item{text-align:center;width:190px}
-.doc-firma-item .linea{border-top:1px solid #333;margin-bottom:5px}
+.doc-firma{
+  display:flex;justify-content:space-around;gap:38px;
+  margin-top:82px;padding-top:34px;min-height:118px;
+  page-break-inside:avoid;break-inside:avoid
+}
+.doc-firma-item{text-align:center;width:235px}
+.doc-firma-item .linea{border-top:1px solid #333;margin-bottom:10px}
 .doc-firma-item p{font-size:8.5pt;color:#333}
-#preview-doc{color:#111}
+#preview-doc{
+  color:#111;
+  width:210mm;
+  min-height:297mm;
+  max-width:100%;
+  margin:0 auto;
+  box-sizing:border-box
+}
 #preview-doc td{color:#111!important}
 
 /* â•â•â• EMPTY STATES â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
@@ -718,7 +729,7 @@ tr:hover td.matrix-sticky{background:#101923}
   body > *:not(#print-output){display:none!important}
   #app,.page-footer,.topbar,.tabs,.ramos-bar,.notif,.modal-bg,#login-screen,.view,#offline-banner,#inactivity-warning,#autosave-info{display:none!important}
   #print-output{display:block!important;background:#fff!important}
-  @page{margin:1.5cm;size:A4}
+  @page{size:210mm 297mm;margin:12mm}
   .doc-table th{background:#f0f7f3!important;color:#1B4432!important;border-bottom:2px solid #1B4432!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
   .doc-cap-row td{background:#e8f4ef!important;color:#1B4432!important;border-left:3px solid #1B4432!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
   .doc-table tr:last-child td{background:#fff!important;color:#111!important;border-top:3px solid #1B4432!important;border-bottom:2px solid #1B4432!important}
